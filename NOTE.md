@@ -7,3 +7,6 @@
 conda env create -f ./env/mid_env.yaml
 ```
 
+.whl文件可以手动下载，直接 pip install 就行
+
+# 
