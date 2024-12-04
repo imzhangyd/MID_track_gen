@@ -193,6 +193,9 @@ class MID():
         print("> Everything built. Have fun :)")
 
     def _build_dir(self):
+        '''
+        构建模型的保存路径，日志保存路径（出）, 数据的路径（入）
+        '''
         self.model_dir = osp.join("./experiments",self.config.exp_name)
         self.log_writer = SummaryWriter(log_dir=self.model_dir)
         os.makedirs(self.model_dir,exist_ok=True)
@@ -217,16 +220,12 @@ class MID():
         self.eval_data_path = osp.join(self.config.data_dir,self.config.dataset + "_test.pkl")
         print("> Directory built!")
 
-    def _build_optimizer(self):
-        self.optimizer = optim.Adam([{'params': self.registrar.get_all_but_name_match('map_encoder').parameters()},
-                                     {'params': self.model.parameters()}
-                                    ],
-                                    lr=self.config.lr)
-        self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer,gamma=0.98)
-        print("> Optimizer built!")
+    
 
     def _build_encoder_config(self):
-
+        '''
+        
+        '''
         self.hyperparams = get_traj_hypers()
         self.hyperparams['enc_rnn_dim_edge'] = self.config.encoder_dim//2
         self.hyperparams['enc_rnn_dim_edge_influence'] = self.config.encoder_dim//2
@@ -356,3 +355,14 @@ class MID():
                                             self.hyperparams['edge_addition_filter'],
                                             self.hyperparams['edge_removal_filter'])
                 print(f"Created Scene Graph for Evaluation Scene {i}")
+                
+    def _build_optimizer(self):
+        '''
+        构建优化器
+        '''
+        self.optimizer = optim.Adam([{'params': self.registrar.get_all_but_name_match('map_encoder').parameters()},
+                                     {'params': self.model.parameters()}
+                                    ],
+                                    lr=self.config.lr)
+        self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer,gamma=0.98)
+        print("> Optimizer built!")
