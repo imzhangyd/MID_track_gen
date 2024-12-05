@@ -6,8 +6,8 @@ import yaml
 from easydict import EasyDict
 import numpy as np
 import pdb
-
-
+import shutil
+import os.path as osp
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -25,11 +25,19 @@ def main():
 
     for k, v in vars(args).items():
        config[k] = v
-    config["exp_name"] = args.config.split("/")[-1].split(".")[0]
+    if 'exp_name' in config.keys() and config["exp_name"] is not None:
+        pass
+    else:
+        config["exp_name"] = args.config.split("/")[-1].split(".")[0]
     # config["dataset"] = args.dataset[:-1]
     #pdb.set_trace()
     config = EasyDict(config)
     agent = MID(config)
+
+    model_dir = osp.join("./experiments", config.exp_name)
+    shutil.copy(args.config, os.path.join(model_dir, os.path.basename(args.config)))
+    shutil.copy('./utils/trajectron_hypers.py', os.path.join(model_dir, 'trajectron_hypers.py'))
+
 
     # keyattr = ["lr", "data_dir", "epochs", "dataset", "batch_size","diffnet"]
     # keys = {}

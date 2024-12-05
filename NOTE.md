@@ -133,11 +133,39 @@ python main.py --config configs/reproduce.yaml --dataset eth
 ### 取数据
 遍历eval视频，每隔10帧取其中的node聚合一个batch
 
-也是先给轨迹和邻居 encoder
+也是先给轨迹和邻居 encoder，采样噪声，denose网络预测噪声
+恢复预测轨迹结果
+
+计算指标
+ADE是各个位置上的均方误差
+fde是最后一个位置上的均方误差
 
 
+##
+这个任务就是，input 一个场景下，坐标点和历史轨迹，然后预测未来的位置。
+
+如果想用这个方法生成数据
+初始化第一帧：生成一张点的分布
+然后送入模型预测各个点的未来轨迹，预测一个就可以
+可以设置只预测下两帧这样，接受两帧的结果
+然后更新轨迹和场景，然后再继续预测
+
+需要做的就是，每一帧点的出现和消失，需要我们来设置
+
+需要写的就是一个，外部的控制过程，内部的模型训练还是用这个就可以。
+
+或者有没有可能：让这个模型可以学习到停止的情况。
+
+总的来说，就是先看一下用这个模型训练粒子轨迹的预测效果如何，
+不同的粒子运动状态，以及一些细胞的轨迹都可以。
 
 
+## 制作粒子/细胞数据集
+
+
+python main.py --config configs/microtubule_low.yaml --dataset microtubule_low
+
+python main.py --config configs/receptor_low.yaml --dataset receptor_low
 
 
 

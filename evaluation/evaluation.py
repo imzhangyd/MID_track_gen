@@ -9,13 +9,14 @@ import pdb
 
 
 def compute_ade(predicted_trajs, gt_traj):
-    #pdb.set_trace()
+    # ade 就是所有的预测的欧氏距离平均（实际上是速度）
     error = np.linalg.norm(predicted_trajs - gt_traj, axis=-1)
     ade = np.mean(error, axis=-1)
     return ade.flatten()
 
-
-def compute_fde(predicted_trajs, gt_traj):
+# gt_traj shape [futurelen,2] 
+def compute_fde(predicted_trajs, gt_traj): #predicted_trajs shape[1,samplenum,futurelen,2] 
+    # fde是最终位置的欧氏距离平均（速度）
     final_error = np.linalg.norm(predicted_trajs[:, :, -1] - gt_traj[-1], axis=-1)
     return final_error.flatten()
 
@@ -66,7 +67,7 @@ def compute_batch_statistics(prediction_output_dict,
                              map=None,
                              prune_ph_to_future=False,
                              best_of=False):
-
+    ''' 可以根据时间范围，从Node本身获取历史轨迹和未来轨迹'''
     (prediction_dict,
      _,
      futures_dict) = prediction_output_to_trajectories(prediction_output_dict,

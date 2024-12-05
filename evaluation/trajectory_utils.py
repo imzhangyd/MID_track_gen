@@ -22,10 +22,10 @@ def prediction_output_to_trajectories(prediction_output_dict,
         for node in prediction_nodes:
             predictions_output = prediction_output_dict[t][node]
             position_state = {'position': ['x', 'y']}
-
+            # 可以从node中获取历史轨迹
             history = node.get(np.array([t - max_h, t]), position_state)  # History includes current pos
             history = history[~np.isnan(history.sum(axis=1))]
-            #pdb.set_trace()
+            # 可以从node中获取未来轨迹
             future = node.get(np.array([t + 1, t + ph]), position_state)
             # replace nan to 0
             #future[np.isnan(future)] = 0

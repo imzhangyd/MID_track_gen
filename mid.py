@@ -44,9 +44,16 @@ class MID():
                     # ipdb.set_trace()
                     self.optimizer.zero_grad()
                     train_loss = self.model.get_loss(batch, node_type)
+                    if self.log_writer is not None:
+                        self.log_writer.add_scalar('Loss/train_step', train_loss.item(), (epoch-1) * len(data_loader) + pbar.n)
+                        # 获取当前学习率
+                        current_lr = self.optimizer.param_groups[0]['lr']
+                        # 记录学习率到 TensorBoard
+                        self.log_writer.add_scalar('LearningRate', current_lr, (epoch-1) * len(data_loader) + pbar.n)
                     pbar.set_description(f"Epoch {epoch}, {node_type} MSE: {train_loss.item():.2f}")
                     train_loss.backward()
                     self.optimizer.step()
+                    
 
             self.train_dataset.augment = False
             if epoch % self.config.eval_every == 0:
@@ -66,15 +73,15 @@ class MID():
                         timesteps = np.arange(t,t+10)
                         batch = get_timesteps_data(env=self.eval_env, scene=scene, t=timesteps, node_type=node_type, state=self.hyperparams['state'],
                                        pred_state=self.hyperparams['pred_state'], edge_types=self.eval_env.get_edge_types(),
-                                       min_ht=7, max_ht=self.hyperparams['maximum_history_length'], min_ft=12,
-                                       max_ft=12, hyperparams=self.hyperparams)
+                                       min_ht=max_hl, max_ht=max_hl, min_ft=ph,
+                                       max_ft=ph, hyperparams=self.hyperparams)
                         # 每个batch 有collate(batch), nodes, out_timesteps
                         if batch is None:
                             continue
                         test_batch = batch[0]
                         nodes = batch[1]
                         timesteps_o = batch[2] # sample是设置采样的数量，也就是生成的结果的个数
-                        traj_pred = self.model.generate(test_batch, node_type, num_points=12, sample=20,bestof=True) # B * 20 * 12 * 2
+                        traj_pred = self.model.generate(test_batch, node_type, num_points=ph, sample=self.config.k_eval,bestof=True) # B * 20 * 12 * 2
                         # 预测的轨迹traj_pred
                         predictions = traj_pred
                         predictions_dict = {}
@@ -107,10 +114,12 @@ class MID():
                 elif self.config.dataset == "sdd":
                     ade = ade * 50
                     fde = fde * 50
+                if self.log_writer is not None:
+                    self.log_writer.add_scalar('Eval/ADE', ade, epoch)
+                    self.log_writer.add_scalar('Eval/FDE', fde, epoch)
 
-
-                print(f"Epoch {epoch} Best Of 20: ADE: {ade} FDE: {fde}")
-                self.log.info(f"Best of 20: Epoch {epoch} ADE: {ade} FDE: {fde}")
+                print(f"Epoch {epoch} | ADE: {ade} FDE: {fde}")
+                self.log.info(f"| Epoch {epoch} ADE: {ade} FDE: {fde}")
 
                 # Saving model
                 checkpoint = {
@@ -140,14 +149,15 @@ class MID():
                 timesteps = np.arange(t,t+10)
                 batch = get_timesteps_data(env=self.eval_env, scene=scene, t=timesteps, node_type=node_type, state=self.hyperparams['state'],
                                pred_state=self.hyperparams['pred_state'], edge_types=self.eval_env.get_edge_types(),
-                               min_ht=7, max_ht=self.hyperparams['maximum_history_length'], min_ft=12,
-                               max_ft=12, hyperparams=self.hyperparams)
+                               min_ht=max_hl, max_ht=max_hl, min_ft=ph, max_ft=ph, # 固定hist长度为最大，future长度
+                               hyperparams=self.hyperparams)
                 if batch is None:
                     continue
-                test_batch = batch[0]
-                nodes = batch[1]
+                ipdb.set_trace()
+                test_batch = batch[0] # len=9 
+                nodes = batch[1] # 这些node本身包含了hist信息
                 timesteps_o = batch[2]
-                traj_pred = self.model.generate(test_batch, node_type, num_points=12, sample=20,bestof=True, sampling=sampling, step=step) # B * 20 * 12 * 2
+                traj_pred = self.model.generate(test_batch, node_type, num_points=ph, sample=self.config.k_eval, bestof=True, sampling=sampling, step=step) # B * 20 * 12 * 2
 
                 predictions = traj_pred
                 predictions_dict = {}
@@ -155,7 +165,7 @@ class MID():
                     if ts not in predictions_dict.keys():
                         predictions_dict[ts] = dict()
                     predictions_dict[ts][nodes[i]] = np.transpose(predictions[:, [i]], (1, 0, 2, 3))
-
+                # predictions_dict key是timestep value是NODES = 预测的多个值 1,sampletime, futurelen, dim
 
 
                 batch_error_dict = evaluation.compute_batch_statistics(predictions_dict,
@@ -183,8 +193,8 @@ class MID():
             ade = ade * 50
             fde = fde * 50
         print(f"Sampling: {sampling} Stride: {step}")
-        print(f"Epoch {epoch} Best Of 20: ADE: {ade} FDE: {fde}")
-        #self.log.info(f"Best of 20: Epoch {epoch} ADE: {ade} FDE: {fde}")
+        print(f"Epoch {epoch} | ADE: {ade} FDE: {fde}")
+        #self.log.info(f"| Epoch {epoch} ADE: {ade} FDE: {fde}")
 
 
     def _build(self):
