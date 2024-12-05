@@ -78,13 +78,14 @@ class DiffusionTraj(Module):
 
         e_rand = torch.randn_like(x_0).cuda()  # (B, N, d)
         # self.net 是 TransformerConcatLinear
-        # c0 * x_0 + c1 * e_rand 这是噪声吗
-        e_theta = self.net(c0 * x_0 + c1 * e_rand, beta=beta, context=context) #这是条件
+        # c0 * x_0 + c1 * e_rand 是加噪了的结果，  self.net是去噪网络，噪声预测网络
+        e_theta = self.net(c0 * x_0 + c1 * e_rand, beta=beta, context=context) #context是条件
         loss = F.mse_loss(e_theta.view(-1, point_dim), e_rand.view(-1, point_dim), reduction='mean')
         return loss
 
     def sample(self, num_points, context, sample, bestof, point_dim=2, flexibility=0.0, ret_traj=False, sampling="ddpm", step=100):
         traj_list = []
+        # 多次采样噪声，在条件控制下，预测噪声，然后恢复实际要预测的未来轨迹,返回预测的轨迹
         for i in range(sample):
             batch_size = context.size(0)
             if bestof:

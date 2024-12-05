@@ -50,7 +50,7 @@ sample的长度就是，所有视频中的检测点的数量
 每一个node都：类型，指定状态的完整序列，开始的frame_id
 
 ### get_node_timestep_data
-
+每次训练加载数据都会做滑动窗口的取值操作。
 类似滑动窗口取history和future
 取neighbor 的state 
 
@@ -60,7 +60,7 @@ y_t y_st_t : 12,2
 neighbors_data_st  adict  m个neighbor的 8,6
 neighbors_edge_value  adict  m个值
 
-### train a batch
+## train a batch
 a batch
 len = 9
 batch[0].shape=256 : [3,0,0,...2,0,0,...5,4,0,0,0] 第一帧
@@ -124,7 +124,16 @@ DuffusionTraj--get_loss
 
 这是预测的噪声，与原本添加的噪声做MSE loss
 
+## eval/val
+To evaluate a trained-model, please set ```eval_mode``` in config file to True and set the epoch you'd like to evaluate at from ```eval_at``` and run
+```bash
+python main.py --config configs/reproduce.yaml --dataset eth
+```
 
+### 取数据
+遍历eval视频，每隔10帧取其中的node聚合一个batch
+
+也是先给轨迹和邻居 encoder
 
 
 

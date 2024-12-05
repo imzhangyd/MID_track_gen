@@ -19,7 +19,7 @@ class AutoEncoder(Module):
 
         self.diffusion = DiffusionTraj(
             net = self.diffnet(point_dim=2, context_dim=config.encoder_dim, tf_layer=config.tf_layer, residual=False),
-            var_sched = VarianceSchedule(
+            var_sched = VarianceSchedule( # 负责扩散的模块
                 num_steps=100,
                 beta_T=5e-2,
                 mode='linear'
@@ -32,7 +32,7 @@ class AutoEncoder(Module):
         return z
     
     def generate(self, batch, node_type, num_points, sample, bestof,flexibility=0.0, ret_traj=False, sampling="ddpm", step=100):
-        #print(f"Using {sampling}")
+        # 推理
         dynamics = self.encoder.node_models_dict[node_type].dynamic
         encoded_x = self.encoder.get_latent(batch, node_type)
         predicted_y_vel =  self.diffusion.sample(num_points, encoded_x,sample,bestof, flexibility=flexibility, ret_traj=ret_traj, sampling=sampling, step=step)
