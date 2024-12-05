@@ -62,14 +62,14 @@ class ConcatSquashLinear(Module):
         self._hyper_bias = Linear(dim_ctx, dim_out, bias=False)
         self._hyper_gate = Linear(dim_ctx, dim_out)
 
-    def forward(self, ctx, x):
-        gate = torch.sigmoid(self._hyper_gate(ctx))
-        bias = self._hyper_bias(ctx)
+    def forward(self, ctx, x): # 用condition生成 gate和bias，输出噪声
+        gate = torch.sigmoid(self._hyper_gate(ctx)) # ctx :bs,1,dim  gate:bs,1,newdim
+        bias = self._hyper_bias(ctx) # bias same as gate shape
         # if x.dim() == 3:
         #     gate = gate.unsqueeze(1)
         #     bias = bias.unsqueeze(1)
-        ret = self._layer(x) * gate + bias
-        return ret
+        ret = self._layer(x) * gate + bias# x.shape bs,fut_len,outdim  res.shape bs,fut_len, newdim
+        return ret # [bs, fut_len, newdim]
 
 
 class ConcatTransformerLinear(Module):

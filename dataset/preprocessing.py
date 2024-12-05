@@ -3,6 +3,8 @@ import numpy as np
 import collections.abc
 from torch.utils.data._utils.collate import default_collate
 import dill
+import ipdb
+
 container_abcs = collections.abc
 
 
@@ -67,6 +69,9 @@ def get_node_timestep_data(env, scene, t, node, state, pred_state,
                            edge_types, max_ht, max_ft, hyperparams,
                            scene_graph=None):
     """
+    处理一个sample，用于网络输入。训练的时候用
+    当前轨迹：需要做滑动窗口的history 和 future 以及归一化
+    邻居：
     Pre-processes the data for a single batch element: node state over time for a specific time in a specific scene
     as well as the neighbour data for it.
 
@@ -77,17 +82,17 @@ def get_node_timestep_data(env, scene, t, node, state, pred_state,
     :param state: Specification of the node state
     :param pred_state: Specification of the prediction state
     :param edge_types: List of all Edge Types for which neighbours are pre-processed
-    :param max_ht: Maximum history timesteps
-    :param max_ft: Maximum future timesteps (prediction horizon)
+    :param max_ht: Maximum history timesteps 最大历史长度
+    :param max_ft: Maximum future timesteps (prediction horizon) 最大未来长度预测
     :param hyperparams: Model hyperparameters
     :param scene_graph: If scene graph was already computed for this scene and time you can pass it here
     :return: Batch Element
     """
-
+    # ipdb.set_trace()
     # Node
     timestep_range_x = np.array([t - max_ht, t])
     timestep_range_y = np.array([t + 1, t + max_ft])
-
+    # x 是 input序列数据 (8时间步,6dim) y是output(12时间步, 2dim)
     x = node.get(timestep_range_x, state[node.type])
     y = node.get(timestep_range_y, pred_state[node.type])
     first_history_index = (max_ht - node.history_points_at(t)).clip(0)
@@ -95,16 +100,16 @@ def get_node_timestep_data(env, scene, t, node, state, pred_state,
     _, std = env.get_standardize_params(state[node.type], node.type)
     std[0:2] = env.attention_radius[(node.type, node.type)]
     rel_state = np.zeros_like(x[0])
-    rel_state[0:2] = np.array(x)[-1, 0:2]
+    rel_state[0:2] = np.array(x)[-1, 0:2] # 最近的位置作为中心mean
     x_st = env.standardize(x, state[node.type], node.type, mean=rel_state, std=std)
     if list(pred_state[node.type].keys())[0] == 'position':  # If we predict position we do it relative to current pos
         y_st = env.standardize(y, pred_state[node.type], node.type, mean=rel_state[0:2])
     else:
         y_st = env.standardize(y, pred_state[node.type], node.type)
 
-    x_t = torch.tensor(x, dtype=torch.float)
+    x_t = torch.tensor(x, dtype=torch.float)# 原坐标系
     y_t = torch.tensor(y, dtype=torch.float)
-    x_st_t = torch.tensor(x_st, dtype=torch.float)
+    x_st_t = torch.tensor(x_st, dtype=torch.float)# 最后坐标为中心的坐标系
     y_st_t = torch.tensor(y_st, dtype=torch.float)
 
     # Neighbors
@@ -130,6 +135,9 @@ def get_node_timestep_data(env, scene, t, node, state, pred_state,
                 neighbors_edge_value[edge_type] = edge_masks
 
             for connected_node in connected_nodes:
+                '''
+                获取各个邻居的hist，制作state
+                '''
                 neighbor_state_np = connected_node.get(np.array([t - max_ht, t]),
                                                        state[connected_node.type],
                                                        padding=0.0)
@@ -149,7 +157,7 @@ def get_node_timestep_data(env, scene, t, node, state, pred_state,
                 neighbor_state = torch.tensor(neighbor_state_np_st, dtype=torch.float)
                 neighbors_data_st[edge_type].append(neighbor_state)
 
-    # Robot
+    # Robot 是否设置其他人的视角  False
     robot_traj_st_t = None
     timestep_range_r = np.array([t, t + max_ft])
     if hyperparams['incl_robot_node']:
@@ -162,7 +170,7 @@ def get_node_timestep_data(env, scene, t, node, state, pred_state,
         robot_traj = robot.get(timestep_range_r, state[robot_type], padding=0.0)
         robot_traj_st_t = get_relative_robot_traj(env, state, x_node, robot_traj, node.type, robot_type)
 
-    # Map
+    # Map 不用地图
     map_tuple = None
     if hyperparams['use_map_encoding']:
         if node.type in hyperparams['map_encoder']:
@@ -189,11 +197,18 @@ def get_node_timestep_data(env, scene, t, node, state, pred_state,
 
     return (first_history_index, x_t, y_t, x_st_t, y_st_t, neighbors_data_st,
             neighbors_edge_value, robot_traj_st_t, map_tuple)
-
+    '''
+    first_history_index = 0是不是这个轨迹的开始帧
+    x_t x_st_t : 8,6
+    y_t y_st_t : 12,2
+    neighbors_data_st  adict  m个neighbor的 8,6
+    neighbors_edge_value  adict  m个值
+    '''
 
 def get_timesteps_data(env, scene, t, node_type, state, pred_state,
                        edge_types, min_ht, max_ht, min_ft, max_ft, hyperparams):
     """
+    val的时候用
     Puts together the inputs for ALL nodes in a given scene and timestep in it.
 
     :param env: Environment

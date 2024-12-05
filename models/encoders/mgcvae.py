@@ -428,7 +428,7 @@ class MultimodalGenerativeCVAE(object):
             x_r_t, y_r = robot[..., 0, :], robot[..., 1:, :]
 
         ##################
-        # Encode History #
+        # Encode History # 得到的是每个轨迹的最后一个位置的编码向量
         ##################
         node_history_encoded = self.encode_node_history(mode,
                                                         node_history_st,
@@ -461,7 +461,7 @@ class MultimodalGenerativeCVAE(object):
                                                       first_history_indices)
                 node_edges_encoded.append(encoded_edges_type)  # List of [bs/nbs, enc_rnn_dim]
             #####################
-            # Encode Node Edges #
+            # Encode Node Edges # 聚合两个编码,或者说把邻居的映射到hist空间
             #####################
             total_edge_influence = self.encode_total_edge_influence(mode,
                                                                     node_edges_encoded,
@@ -504,7 +504,7 @@ class MultimodalGenerativeCVAE(object):
                 self.log_writer.add_scalar(f"{self.node_type}/encoded_map_max",
                                            torch.max(torch.abs(encoded_map)), self.curr_iter)
             x_concat_list.append(encoded_map)
-
+        # cat 轨迹自身的hist编码，邻居的hist编码 [bs, featdim*2]
         x = torch.cat(x_concat_list, dim=1)
 
         # if mode == ModeKeys.TRAIN or mode == ModeKeys.EVAL:
@@ -513,8 +513,8 @@ class MultimodalGenerativeCVAE(object):
 
         #pdb.set_trace()
 
-        y_e = None
-        return x, x_r_t, y_e, y_r, y, n_s_t0
+        y_e = None # xshape [bs, featdim*2] yshape[bs, futurelen, outdim] 
+        return x, x_r_t, y_e, y_r, y, n_s_t0 # n_s_t0:[bs, inputdim] 最新位置的标准化
 
     def encode_node_history(self, mode, node_hist, first_history_indices):
         """
@@ -528,13 +528,13 @@ class MultimodalGenerativeCVAE(object):
         outputs, _ = run_lstm_on_variable_length_seqs(self.node_modules[self.node_type + '/node_history_encoder'],
                                                       original_seqs=node_hist,
                                                       lower_indices=first_history_indices)
-
+        # 其实没有用h_n 和 c_n
         outputs = F.dropout(outputs,
                             p=1. - self.hyperparams['rnn_kwargs']['dropout_keep_prob'],
                             training=(mode == ModeKeys.TRAIN))  # [bs, max_time, enc_rnn_dim]
 
         last_index_per_sequence = -(first_history_indices + 1)
-
+        # 输出的空的就是在后面的，这里返回的是，每个hist的最后一个位置的LSTM的输出向量
         return outputs[torch.arange(first_history_indices.shape[0]), last_index_per_sequence]
 
     def encode_edge(self,
@@ -542,12 +542,12 @@ class MultimodalGenerativeCVAE(object):
                     node_history,
                     node_history_st,
                     edge_type,
-                    neighbors,
-                    neighbors_edge_value,
+                    neighbors, # a list len=bs
+                    neighbors_edge_value, # a list len=bs
                     first_history_indices):
 
         max_hl = self.hyperparams['maximum_history_length']
-
+        # 把各个sample的邻居们聚合成一个tensor 存在这个list中
         edge_states_list = list()  # list of [#of neighbors, max_ht, state_dim]
         for i, neighbor_states in enumerate(neighbors):  # Get neighbors for timestep in batch
             if len(neighbor_states) == 0:  # There are no neighbors for edge type # TODO necessary?
@@ -558,20 +558,20 @@ class MultimodalGenerativeCVAE(object):
             else:
                 edge_states_list.append(torch.stack(neighbor_states, dim=0).to(self.device))
 
-        if self.hyperparams['edge_state_combine_method'] == 'sum':
+        if self.hyperparams['edge_state_combine_method'] == 'sum': #选这个
             # Used in Structural-RNN to combine edges as well.
             op_applied_edge_states_list = list()
-            for neighbors_state in edge_states_list:
+            for neighbors_state in edge_states_list: # 把邻居的hist都sum一起,每个sample的邻居就是一个[hist_len, inputdim]
                 op_applied_edge_states_list.append(torch.sum(neighbors_state, dim=0))
-            combined_neighbors = torch.stack(op_applied_edge_states_list, dim=0)
+            combined_neighbors = torch.stack(op_applied_edge_states_list, dim=0) # bs, hist_len, input_dim
             if self.hyperparams['dynamic_edges'] == 'yes':
-                # Should now be (bs, time, 1)
+                # Should now be (bs, time, 1)  把邻居的value求和，然后和1相比，如果是大于1的话就是1,作为有没有邻居的mask
                 op_applied_edge_mask_list = list()
                 for edge_value in neighbors_edge_value:
                     op_applied_edge_mask_list.append(torch.clamp(torch.sum(edge_value.to(self.device),
                                                                            dim=0, keepdim=True), max=1.))
                 combined_edge_masks = torch.stack(op_applied_edge_mask_list, dim=0)
-
+        # combined_edge_masks shape =[bs,1] value= 0 or 1
         elif self.hyperparams['edge_state_combine_method'] == 'max':
             # Used in NLP, e.g. max over word embeddings in a sentence.
             op_applied_edge_states_list = list()
@@ -601,17 +601,17 @@ class MultimodalGenerativeCVAE(object):
                 combined_edge_masks = torch.stack(op_applied_edge_mask_list, dim=0)
 
         joint_history = torch.cat([combined_neighbors, node_history_st], dim=-1)
-
+        # joint_history shape [bs, hist_len, inputdim * 2]
         outputs, _ = run_lstm_on_variable_length_seqs(
             self.node_modules[DirectedEdge.get_str_from_types(*edge_type) + '/edge_encoder'],
             original_seqs=joint_history,
             lower_indices=first_history_indices
         )
 
-        outputs = F.dropout(outputs,
+        outputs = F.dropout(outputs, #bs, hist_len, feat_dim=128
                             p=1. - self.hyperparams['rnn_kwargs']['dropout_keep_prob'],
                             training=(mode == ModeKeys.TRAIN))  # [bs, max_time, enc_rnn_dim]
-
+        # LSTM编码轨迹历史和hist历史，返回编码后的最后轨迹的最后一个位置
         last_index_per_sequence = -(first_history_indices + 1)
         ret = outputs[torch.arange(last_index_per_sequence.shape[0]), last_index_per_sequence]
         if self.hyperparams['dynamic_edges'] == 'yes':
@@ -645,7 +645,7 @@ class MultimodalGenerativeCVAE(object):
                 combined_edges = F.dropout(combined_edges,
                                            p=1. - self.hyperparams['rnn_kwargs']['dropout_keep_prob'],
                                            training=(mode == ModeKeys.TRAIN))
-
+        # 选这个
         elif self.hyperparams['edge_influence_combine_method'] == 'attention':
             # Used in Social Attention (https://arxiv.org/abs/1710.04689)
             if len(encoded_edges) == 0:
@@ -653,13 +653,13 @@ class MultimodalGenerativeCVAE(object):
 
             else:
                 # axis=1 because then we get size [batch_size, max_time, depth]
-                encoded_edges = torch.stack(encoded_edges, dim=1)
+                encoded_edges = torch.stack(encoded_edges, dim=1) # bs,1, 128
                 combined_edges, _ = self.node_modules[self.node_type + '/edge_influence_encoder'](encoded_edges,
                                                                                                   node_history_encoder)
                 combined_edges = F.dropout(combined_edges,
                                            p=1. - self.hyperparams['rnn_kwargs']['dropout_keep_prob'],
                                            training=(mode == ModeKeys.TRAIN))
-
+        # combined_edges bs,128
         return combined_edges
 
     def encode_node_future(self, mode, node_present, node_future) -> torch.Tensor:
@@ -986,13 +986,13 @@ class MultimodalGenerativeCVAE(object):
         mode = ModeKeys.TRAIN
 
         x, x_nr_t, y_e, y_r, y, n_s_t0 = self.obtain_encoded_tensors(mode=mode,
-                                                                     inputs=inputs,
-                                                                     inputs_st=inputs_st,
-                                                                     labels=labels,
-                                                                     labels_st=labels_st,
-                                                                     first_history_indices=first_history_indices,
-                                                                     neighbors=neighbors,
-                                                                     neighbors_edge_value=neighbors_edge_value,
+                                                                     inputs=inputs, # [bs, hist_len, input_dim] 
+                                                                     inputs_st=inputs_st, # [bs, hist_len, input_dim]
+                                                                     labels=labels, # [bs, future_len, pred_dim]
+                                                                     labels_st=labels_st, # #[bs, future_len, pred_dim]
+                                                                     first_history_indices=first_history_indices, # [bs]
+                                                                     neighbors=neighbors, # a dict
+                                                                     neighbors_edge_value=neighbors_edge_value, # a dict
                                                                      robot=robot,
                                                                      map=map)
         # if mode == ModeKeys.TRAIN:

@@ -62,7 +62,7 @@ def mutual_inf_mc(x_dist):
 
 
 def run_lstm_on_variable_length_seqs(lstm_module, original_seqs, lower_indices=None, upper_indices=None, total_length=None):
-    bs, tf = original_seqs.shape[:2]
+    bs, tf = original_seqs.shape[:2] # tf: history_length
     if lower_indices is None:
         lower_indices = torch.zeros(bs, dtype=torch.int)
     if upper_indices is None:
@@ -73,16 +73,16 @@ def run_lstm_on_variable_length_seqs(lstm_module, original_seqs, lower_indices=N
     # (which we want to INCLUDE, so this will exclude the next timestep).
     inclusive_break_indices = upper_indices + 1
 
-    pad_list = list()
+    pad_list = list() # 这里就是取出来 真实存在的history，原本填充的是nan
     for i, seq_len in enumerate(inclusive_break_indices):
         pad_list.append(original_seqs[i, lower_indices[i]:seq_len])
-
+    # 整理这些不同长度的序列，方便RNN处理，之后再转换回来
     packed_seqs = rnn.pack_sequence(pad_list, enforce_sorted=False)
-    packed_output, (h_n, c_n) = lstm_module(packed_seqs)
-    output, _ = rnn.pad_packed_sequence(packed_output,
+    packed_output, (h_n, c_n) = lstm_module(packed_seqs) #h_n[1,256,128] c_n[1,256,128]，意义参考NOTE.md
+    output, _ = rnn.pad_packed_sequence(packed_output,# 但是填充就是在后面了，先前的是前面
                                         batch_first=True,
                                         total_length=total_length)
-
+    # output.hsape=[bs, hist_len, feat_dim=128],h_n, c_n shape=[1, bs, feat_dim]
     return output, (h_n, c_n)
 
 

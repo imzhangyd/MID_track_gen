@@ -105,7 +105,7 @@ for desired_source in ['eth', 'hotel', 'univ', 'zara1', 'zara2']:
         attention_radius[(env.NodeType.PEDESTRIAN, env.NodeType.PEDESTRIAN)] = 3.0
         env.attention_radius = attention_radius
 
-        scenes = []
+        scenes = [] # 一个视频一个scene
         data_dict_path = os.path.join(data_folder_name, '_'.join([desired_source, data_class]) + '.pkl')
 
         for subdir, dirs, files in os.walk(os.path.join('raw_data', desired_source, data_class)):
@@ -120,7 +120,7 @@ for desired_source in ['eth', 'hotel', 'univ', 'zara1', 'zara2']:
                     data['frame_id'] = pd.to_numeric(data['frame_id'], downcast='integer')
                     data['track_id'] = pd.to_numeric(data['track_id'], downcast='integer')
 
-                    data['frame_id'] = data['frame_id'] // 10
+                    data['frame_id'] = data['frame_id'] // 10 # 转变frame id
 
                     data['frame_id'] -= data['frame_id'].min()
 
@@ -139,15 +139,15 @@ for desired_source in ['eth', 'hotel', 'univ', 'zara1', 'zara2']:
                     #     data['pos_y'] = data['pos_y'] + 2 * np.random.normal(0,1)
 
                         #data = pd.concat([data, data_gauss])
-
+                    # 以轨迹点的均值为中心，规范化
                     data['pos_x'] = data['pos_x'] - data['pos_x'].mean()
                     data['pos_y'] = data['pos_y'] - data['pos_y'].mean()
 
                     max_timesteps = data['frame_id'].max()
-
+                    # 每个视频有一个scene
                     scene = Scene(timesteps=max_timesteps+1, dt=dt, name=desired_source + "_" + data_class, aug_func=augment if data_class == 'train' else None)
 
-                    for node_id in pd.unique(data['node_id']):
+                    for node_id in pd.unique(data['node_id']): # 遍历每个node
 
                         node_df = data[data['node_id'] == node_id]
 
@@ -156,7 +156,7 @@ for desired_source in ['eth', 'hotel', 'univ', 'zara1', 'zara2']:
                         if node_values.shape[0] < 2:
                             continue
 
-                        new_first_idx = node_df['frame_id'].iloc[0]
+                        new_first_idx = node_df['frame_id'].iloc[0] # 第一帧出现的位置
 
                         x = node_values[:, 0]
                         y = node_values[:, 1]
@@ -172,12 +172,12 @@ for desired_source in ['eth', 'hotel', 'univ', 'zara1', 'zara2']:
                                      ('acceleration', 'x'): ax,
                                      ('acceleration', 'y'): ay}
 
-                        node_data = pd.DataFrame(data_dict, columns=data_columns)
+                        node_data = pd.DataFrame(data_dict, columns=data_columns) # 建立一个新的df，不包含t信息
                         node = Node(node_type=env.NodeType.PEDESTRIAN, node_id=node_id, data=node_data)
                         node.first_timestep = new_first_idx
 
                         scene.nodes.append(node)
-                    if data_class == 'train':
+                    if data_class == 'train': # 增广训练数据各个角度
                         scene.augmented = list()
                         angles = np.arange(0, 360, 15) if data_class == 'train' else [0]
                         for angle in angles:
@@ -191,7 +191,7 @@ for desired_source in ['eth', 'hotel', 'univ', 'zara1', 'zara2']:
 
         if len(scenes) > 0:
             with open(data_dict_path, 'wb') as f:
-                dill.dump(env, f, protocol=dill.HIGHEST_PROTOCOL)
+                dill.dump(env, f, protocol=dill.HIGHEST_PROTOCOL) #保存Environmnet class
 exit()
 # Process Stanford Drone. Data obtained from Y-Net github repo
 data_columns = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration'], ['x', 'y']])

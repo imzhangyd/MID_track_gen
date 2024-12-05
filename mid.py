@@ -19,8 +19,17 @@ from models.trajectron import Trajectron
 from utils.model_registrar import ModelRegistrar
 from utils.trajectron_hypers import get_traj_hypers
 import evaluation
+import ipdb
+
 
 class MID():
+    '''
+    组织训练流程，包括
+        build 准备数据、数据loader、模型、优化器
+        train 训练多个epoch
+        eval eval过程
+    更像是一个pipe管理
+    '''
     def __init__(self, config):
         self.config = config
         torch.backends.cudnn.benchmark = True
@@ -31,8 +40,8 @@ class MID():
             self.train_dataset.augment = self.config.augment
             for node_type, data_loader in self.train_data_loader.items():
                 pbar = tqdm(data_loader, ncols=80)
-                for batch in pbar:
-
+                for batch in pbar: # len(batch) = 9
+                    ipdb.set_trace()
                     self.optimizer.zero_grad()
                     train_loss = self.model.get_loss(batch, node_type)
                     pbar.set_description(f"Epoch {epoch}, {node_type} MSE: {train_loss.item():.2f}")
@@ -224,7 +233,7 @@ class MID():
 
     def _build_encoder_config(self):
         '''
-        
+        构建编码器的配置，加载train val 数据
         '''
         self.hyperparams = get_traj_hypers()
         self.hyperparams['enc_rnn_dim_edge'] = self.config.encoder_dim//2
@@ -248,6 +257,9 @@ class MID():
             self.eval_env = dill.load(f, encoding='latin1')
 
     def _build_encoder(self):
+        '''
+        构建encoder
+        '''
         self.encoder = Trajectron(self.registrar, self.hyperparams, "cuda")
 
         self.encoder.set_environment(self.train_env)
@@ -281,12 +293,12 @@ class MID():
         self.train_scenes_sample_probs = self.train_env.scenes_freq_mult_prop if config.scene_freq_mult_train else None
 
         self.train_dataset = EnvironmentDataset(train_env,
-                                           self.hyperparams['state'],
-                                           self.hyperparams['pred_state'],
+                                           self.hyperparams['state'], # 这是输入的状态变量定义
+                                           self.hyperparams['pred_state'], #输出的状态变量 （位移）
                                            scene_freq_mult=self.hyperparams['scene_freq_mult_train'],
                                            node_freq_mult=self.hyperparams['node_freq_mult_train'],
                                            hyperparams=self.hyperparams,
-                                           min_history_timesteps=1,
+                                           min_history_timesteps=1, # 历史长度可以是1
                                            min_future_timesteps=self.hyperparams['prediction_horizon'],
                                            return_robot=not self.config.incl_robot_node)
         self.train_data_loader = dict()
@@ -355,7 +367,7 @@ class MID():
                                             self.hyperparams['edge_addition_filter'],
                                             self.hyperparams['edge_removal_filter'])
                 print(f"Created Scene Graph for Evaluation Scene {i}")
-                
+
     def _build_optimizer(self):
         '''
         构建优化器

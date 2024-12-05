@@ -64,22 +64,22 @@ class DiffusionTraj(Module):
         self.net = net
         self.var_sched = var_sched
 
-    def get_loss(self, x_0, context, t=None):
-
+    def get_loss(self, x_0, context, t=None): 
+        # x_0 是 bs,futurelen, outdim 是label; context是bs，featdim=256
         batch_size, _, point_dim = x_0.size()
-        if t == None:
-            t = self.var_sched.uniform_sample_t(batch_size)
-
-        alpha_bar = self.var_sched.alpha_bars[t]
-        beta = self.var_sched.betas[t].cuda()
+        if t == None: # # 采样出每个样本不同的t（t在step范围内）
+            t = self.var_sched.uniform_sample_t(batch_size) 
+        
+        alpha_bar = self.var_sched.alpha_bars[t] # bs
+        beta = self.var_sched.betas[t].cuda() # bs
 
         c0 = torch.sqrt(alpha_bar).view(-1, 1, 1).cuda()       # (B, 1, 1)
         c1 = torch.sqrt(1 - alpha_bar).view(-1, 1, 1).cuda()   # (B, 1, 1)
 
         e_rand = torch.randn_like(x_0).cuda()  # (B, N, d)
-
-
-        e_theta = self.net(c0 * x_0 + c1 * e_rand, beta=beta, context=context)
+        # self.net 是 TransformerConcatLinear
+        # c0 * x_0 + c1 * e_rand 这是噪声吗
+        e_theta = self.net(c0 * x_0 + c1 * e_rand, beta=beta, context=context) #这是条件
         loss = F.mse_loss(e_theta.view(-1, point_dim), e_rand.view(-1, point_dim), reduction='mean')
         return loss
 
@@ -184,22 +184,22 @@ class TransformerConcatLinear(Module):
         #self.linear = nn.Linear(128,2)
 
 
-    def forward(self, x, beta, context):
+    def forward(self, x, beta, context): # x是添加了噪声的，context是条件
         batch_size = x.size(0)
         beta = beta.view(batch_size, 1, 1)          # (B, 1, 1)
         context = context.view(batch_size, 1, -1)   # (B, 1, F)
 
         time_emb = torch.cat([beta, torch.sin(beta), torch.cos(beta)], dim=-1)  # (B, 1, 3)
         ctx_emb = torch.cat([time_emb, context], dim=-1)    # (B, 1, F+3)
-        x = self.concat1(ctx_emb,x)
-        final_emb = x.permute(1,0,2)
+        x = self.concat1(ctx_emb,x) # ctx_emb是条件，x是噪声 bs,futlen,newdim
+        final_emb = x.permute(1,0,2) #futlen,bs,newdim
         final_emb = self.pos_emb(final_emb)
 
 
         trans = self.transformer_encoder(final_emb).permute(1,0,2)
-        trans = self.concat3(ctx_emb, trans)
+        trans = self.concat3(ctx_emb, trans) #都是用context生成w,b给future pred
         trans = self.concat4(ctx_emb, trans)
-        return self.linear(ctx_emb, trans)
+        return self.linear(ctx_emb, trans) # bs, fut_len, outdim
 
 class TransformerLinear(Module):
 

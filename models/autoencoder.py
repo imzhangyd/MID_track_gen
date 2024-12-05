@@ -8,7 +8,9 @@ from models.diffusion import DiffusionTraj,VarianceSchedule
 import pdb
 
 class AutoEncoder(Module):
-
+    '''
+    model
+    '''
     def __init__(self, config, encoder):
         super().__init__()
         self.config = config
@@ -25,7 +27,7 @@ class AutoEncoder(Module):
             )
         )
 
-    def encode(self, batch,node_type):
+    def encode(self, batch,node_type): # 编码历史信息
         z = self.encoder.get_latent(batch, node_type)
         return z
     
@@ -43,7 +45,7 @@ class AutoEncoder(Module):
          neighbors_data_st,
          neighbors_edge_value,
          robot_traj_st_t,
-         map) = batch
+         map) = batch # dataset 的内容
 
         feat_x_encoded = self.encode(batch,node_type) # B * 64
         loss = self.diffusion.get_loss(y_t.cuda(), feat_x_encoded)
