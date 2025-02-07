@@ -39,6 +39,8 @@ from environment import Environment, Scene, Node, derivative_of
 
 from torch import nn, optim, utils
 import ipdb
+from scipy.optimize import curve_fit
+from scipy.stats import ttest_ind, mannwhitneyu
 
 
 def seq2env(seq_data,):
@@ -304,6 +306,7 @@ def main():
     # -----------------制作当前iter的数据集--------------------
     data_txt_path = '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/vesicle_low/val/VESICLE_snr_7_density_low.txt'
     traj_hist_df = init_data_with_dataset(data_txt_path)
+    init_traj_df = traj_hist_df.copy()
     vis_tracks(traj_hist_df,name='ini_traj')
     # 1 构建一个初始化的数据分布
     # init_pos = np.random.rand(num_trajectories, 2) * video_width
@@ -344,7 +347,7 @@ def main():
             # 重新制作数据集
             traj_hist_env, mean_value = seq2env(traj_hist_df)
 
-    return traj_hist_df
+    return traj_hist_df, init_traj_df
 
 def vis_tracks(pred_traj, name=None):
     # 设置图的大小（单位为英寸）
@@ -384,8 +387,79 @@ def vis_tracks(pred_traj, name=None):
     # 显示图像
     # plt.show()
 
+
+
+# 计算MSD
+def calculate_msd(track_data):
+    times = track_data['frame_id'].values
+    positions = track_data[['pos_x', 'pos_y']].values
+    msd = []
+    for dt in range(1, len(times)):
+        displacements = positions[dt:] - positions[:-dt]
+        msd.append(np.mean(np.sum(displacements**2, axis=1)))
+    return np.array(msd)
+
+# 拟合MSD曲线
+def linear_fit(t, D, C):
+    return 2 * D * t + C
+
+# 计算扩散系数
+def calculate_diffusion_coefficient(msd, dt):
+    times = np.arange(1, len(msd) + 1) * dt
+    popt, _ = curve_fit(linear_fit, times, msd)
+    return popt[0]
+
+def cal_msd_sim(df1, df2):
+    # 分组计算每个轨迹的MSD和扩散系数
+    grouped1 = df1.groupby('track_id')
+    diffusion_coefficients1 = []
+
+    for track_id, track_data in grouped1:
+        msd = calculate_msd(track_data)
+        dt = 1  # 假设时间间隔为1
+        D = calculate_diffusion_coefficient(msd, dt)
+        diffusion_coefficients1.append(D)
+
+    grouped2 = df2.groupby('track_id')
+    diffusion_coefficients2 = []
+
+    for track_id, track_data in grouped2:
+        msd = calculate_msd(track_data)
+        dt = 1  # 假设时间间隔为1
+        D = calculate_diffusion_coefficient(msd, dt)
+        diffusion_coefficients2.append(D)
+
+    # 统计每组轨迹的扩散系数
+    mean1 = np.mean(diffusion_coefficients1)
+    std1 = np.std(diffusion_coefficients1)
+    mean2 = np.mean(diffusion_coefficients2)
+    std2 = np.std(diffusion_coefficients2)
+
+    # 进行假设检验
+    t_stat, p_value = ttest_ind(diffusion_coefficients1, diffusion_coefficients2)
+    u_stat, u_p_value = mannwhitneyu(diffusion_coefficients1, diffusion_coefficients2)
+
+    # 输出结果
+    print(f"Group 1: Mean = {mean1}, Std = {std1}")
+    print(f"Group 2: Mean = {mean2}, Std = {std2}")
+    print(f"T-test: t_stat = {t_stat}, p_value = {p_value}")
+    print(f"Mann-Whitney U-test: u_stat = {u_stat}, u_p_value = {u_p_value}")
+
+    # 判断显著性
+    alpha = 0.05
+    if p_value < alpha:
+        print("T-test: 两组轨迹的扩散系数存在显著差异")
+    else:
+        print("T-test: 两组轨迹的扩散系数没有显著差异")
+
+    if u_p_value < alpha:
+        print("Mann-Whitney U-test: 两组轨迹的扩散系数存在显著差异")
+    else:
+        print("Mann-Whitney U-test: 两组轨迹的扩散系数没有显著差异")
+
+
 if __name__ == '__main__':
-    pred_traj = main()
+    pred_traj, init_traj_df = main()
     print(pred_traj)
 
     # 可视化生成的部分
@@ -393,5 +467,8 @@ if __name__ == '__main__':
     vis_tracks(vis_gen_traj,name='generate_traj')
     
     # 计算轨迹的性质
+    df1 = init_traj_df
+    df2 = vis_gen_traj
+    cal_msd_sim(df1, df2)
 
 
