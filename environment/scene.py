@@ -140,7 +140,7 @@ class Scene(object):
             if type is None or node.type == type:
                 lower_bound = timesteps - min_history_timesteps
                 upper_bound = timesteps + min_future_timesteps
-                mask = (node.first_timestep <= lower_bound) & (upper_bound <= node.last_timestep)
+                mask = (node.first_timestep <= lower_bound) & (upper_bound <= node.last_timestep)# 表示轨迹长度是大于所需要的样本长度的
                 if mask.any():
                     timestep_indices_present = np.nonzero(mask)[0]
                     for timestep_index_present in timestep_indices_present:

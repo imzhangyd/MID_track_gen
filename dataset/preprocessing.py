@@ -226,23 +226,213 @@ def get_timesteps_data(env, scene, t, node_type, state, pred_state,
     nodes_per_ts = scene.present_nodes(t,
                                        type=node_type,
                                        min_history_timesteps=min_ht,
-                                       min_future_timesteps=max_ft,
+                                       min_future_timesteps=min_ft,
                                        return_robot=not hyperparams['incl_robot_node'])
     batch = list()
     nodes = list()
     out_timesteps = list()
-    for timestep in nodes_per_ts.keys():
-            scene_graph = scene.get_scene_graph(timestep,
+    for timestep in nodes_per_ts.keys(): # 每一帧  （实际如果推理的话，只需要最后一个时空步就行）
+            scene_graph = scene.get_scene_graph(timestep,# 创建时空graph，只创建了一个
                                                 env.attention_radius,
                                                 hyperparams['edge_addition_filter'],
                                                 hyperparams['edge_removal_filter'])
             present_nodes = nodes_per_ts[timestep]
             for node in present_nodes:
                 nodes.append(node)
-                out_timesteps.append(timestep)
+                out_timesteps.append(timestep) # get_node_timestep_data实际去制作一个sample，会有未来的gt，实际推理不能直接用这个方法取样本
                 batch.append(get_node_timestep_data(env, scene, timestep, node, state, pred_state,
                                                     edge_types, max_ht, max_ft, hyperparams,
                                                     scene_graph=scene_graph))
+    if len(out_timesteps) == 0:
+        return None
+    return collate(batch), nodes, out_timesteps
+
+
+def get_node_timestep_data_for_infer(env, scene, t, node, state, pred_state,
+                           edge_types, max_ht, max_ft, hyperparams,
+                           scene_graph=None):
+    """
+    处理一个sample，用于网络输入。推理的时候用
+    当前轨迹：只要做滑动窗口的history以及归一化，不做future。
+    邻居：
+    Pre-processes the data for a single batch element: node state over time for a specific time in a specific scene
+    as well as the neighbour data for it.
+
+    :param env: Environment
+    :param scene: Scene
+    :param t: Timestep in scene
+    :param node: Node
+    :param state: Specification of the node state
+    :param pred_state: Specification of the prediction state
+    :param edge_types: List of all Edge Types for which neighbours are pre-processed
+    :param max_ht: Maximum history timesteps 最大历史长度
+    :param max_ft: Maximum future timesteps (prediction horizon) 最大未来长度预测
+    :param hyperparams: Model hyperparameters
+    :param scene_graph: If scene graph was already computed for this scene and time you can pass it here
+    :return: Batch Element
+    """
+    # ipdb.set_trace()
+    # Node
+    timestep_range_x = np.array([t - max_ht, t])
+    # timestep_range_y = np.array([t + 1, t + max_ft])
+    # x 是 input序列数据 (8时间步,6dim) y是output(12时间步, 2dim)
+    x = node.get(timestep_range_x, state[node.type])
+    # y = node.get(timestep_range_y, pred_state[node.type])
+    first_history_index = (max_ht - node.history_points_at(t)).clip(0)
+
+    _, std = env.get_standardize_params(state[node.type], node.type)
+    std[0:2] = env.attention_radius[(node.type, node.type)]
+    rel_state = np.zeros_like(x[0])
+    rel_state[0:2] = np.array(x)[-1, 0:2] # 最近的位置作为中心mean
+    x_st = env.standardize(x, state[node.type], node.type, mean=rel_state, std=std)
+    # if list(pred_state[node.type].keys())[0] == 'position':  # If we predict position we do it relative to current pos
+    #     y_st = env.standardize(y, pred_state[node.type], node.type, mean=rel_state[0:2])
+    # else:
+    #     y_st = env.standardize(y, pred_state[node.type], node.type)
+
+    x_t = torch.tensor(x, dtype=torch.float)# 原坐标系
+    # y_t = torch.tensor(y, dtype=torch.float)
+    x_st_t = torch.tensor(x_st, dtype=torch.float)# 最后坐标为中心的坐标系
+    # y_st_t = torch.tensor(y_st, dtype=torch.float)
+
+    # Neighbors
+    neighbors_data_st = None
+    neighbors_edge_value = None
+    if hyperparams['edge_encoding']:
+        # Scene Graph
+        scene_graph = scene.get_scene_graph(t,
+                                            env.attention_radius,
+                                            hyperparams['edge_addition_filter'],
+                                            hyperparams['edge_removal_filter']) if scene_graph is None else scene_graph
+
+        neighbors_data_st = dict()
+        neighbors_edge_value = dict()
+        for edge_type in edge_types:
+            neighbors_data_st[edge_type] = list()
+            # We get all nodes which are connected to the current node for the current timestep
+            connected_nodes = scene_graph.get_neighbors(node, edge_type[1])
+
+            if hyperparams['dynamic_edges'] == 'yes':
+                # We get the edge masks for the current node at the current timestep
+                edge_masks = torch.tensor(scene_graph.get_edge_scaling(node), dtype=torch.float)
+                neighbors_edge_value[edge_type] = edge_masks
+
+            for connected_node in connected_nodes:
+                '''
+                获取各个邻居的hist，制作state
+                '''
+                neighbor_state_np = connected_node.get(np.array([t - max_ht, t]),
+                                                       state[connected_node.type],
+                                                       padding=0.0)
+
+                # Make State relative to node where neighbor and node have same state
+                _, std = env.get_standardize_params(state[connected_node.type], node_type=connected_node.type)
+                std[0:2] = env.attention_radius[edge_type]
+                equal_dims = np.min((neighbor_state_np.shape[-1], x.shape[-1]))
+                rel_state = np.zeros_like(neighbor_state_np)
+                rel_state[:, ..., :equal_dims] = x[-1, ..., :equal_dims]
+                neighbor_state_np_st = env.standardize(neighbor_state_np,
+                                                       state[connected_node.type],
+                                                       node_type=connected_node.type,
+                                                       mean=rel_state,
+                                                       std=std)
+
+                neighbor_state = torch.tensor(neighbor_state_np_st, dtype=torch.float)
+                neighbors_data_st[edge_type].append(neighbor_state)
+
+    # Robot 是否设置其他人的视角  False
+    robot_traj_st_t = None
+    timestep_range_r = np.array([t, t + max_ft])
+    if hyperparams['incl_robot_node']:
+        x_node = node.get(timestep_range_r, state[node.type])
+        if scene.non_aug_scene is not None:
+            robot = scene.get_node_by_id(scene.non_aug_scene.robot.id)
+        else:
+            robot = scene.robot
+        robot_type = robot.type
+        robot_traj = robot.get(timestep_range_r, state[robot_type], padding=0.0)
+        robot_traj_st_t = get_relative_robot_traj(env, state, x_node, robot_traj, node.type, robot_type)
+
+    # Map 不用地图
+    map_tuple = None
+    if hyperparams['use_map_encoding']:
+        if node.type in hyperparams['map_encoder']:
+            if node.non_aug_node is not None:
+                x = node.non_aug_node.get(np.array([t]), state[node.type])
+            me_hyp = hyperparams['map_encoder'][node.type]
+            if 'heading_state_index' in me_hyp:
+                heading_state_index = me_hyp['heading_state_index']
+                # We have to rotate the map in the opposit direction of the agent to match them
+                if type(heading_state_index) is list:  # infer from velocity or heading vector
+                    heading_angle = -np.arctan2(x[-1, heading_state_index[1]],
+                                                x[-1, heading_state_index[0]]) * 180 / np.pi
+                else:
+                    heading_angle = -x[-1, heading_state_index] * 180 / np.pi
+            else:
+                heading_angle = None
+
+            scene_map = scene.map[node.type]
+            map_point = x[-1, :2]
+
+
+            patch_size = hyperparams['map_encoder'][node.type]['patch_size']
+            map_tuple = (scene_map, map_point, heading_angle, patch_size)
+
+    y_t = torch.tensor([[0,0]], dtype=torch.float)
+    y_st_t = torch.tensor([[0,0]], dtype=torch.float)
+    return (first_history_index, x_t, y_t, x_st_t, y_st_t, neighbors_data_st,
+            neighbors_edge_value, robot_traj_st_t, map_tuple)
+    '''
+    first_history_index = 0是不是这个轨迹的开始帧
+    x_t x_st_t : 8,6
+    y_t y_st_t : 12,2
+    neighbors_data_st  adict  m个neighbor的 8,6
+    neighbors_edge_value  adict  m个值
+    '''
+
+
+def get_timesteps_data_for_infer(env, scene, t, node_type, state, pred_state,
+                       edge_types, min_ht, max_ht, min_ft, max_ft, hyperparams):
+    """
+    infer的时候用
+    Puts together the inputs for ALL nodes in a given scene and timestep in it.
+
+    :param env: Environment
+    :param scene: Scene
+    :param t: Timestep in scene
+    :param node_type: Node Type of nodes for which the data shall be pre-processed
+    :param state: Specification of the node state
+    :param pred_state: Specification of the prediction state
+    :param edge_types: List of all Edge Types for which neighbors are pre-processed
+    :param max_ht: Maximum history timesteps
+    :param max_ft: Maximum future timesteps (prediction horizon)
+    :param hyperparams: Model hyperparameters
+    :return:
+    """
+    nodes_per_ts = scene.present_nodes(t,
+                                       type=node_type,
+                                       min_history_timesteps=min_ht,
+                                       min_future_timesteps=min_ft,
+                                       return_robot=not hyperparams['incl_robot_node'])
+    batch = list()
+    nodes = list()
+    out_timesteps = list()
+    # 只取最新的一帧的nodes，创建时空图，是为了后面做sample准备
+    timestep = max(list(nodes_per_ts.keys()))
+    # for timestep in nodes_per_ts.keys(): # 每一帧  （实际如果推理的话，只需要最后一个时空步就行）
+    scene_graph = scene.get_scene_graph(timestep,# 创建时空graph，只创建了一个
+                                        env.attention_radius,
+                                        hyperparams['edge_addition_filter'],
+                                        hyperparams['edge_removal_filter'])
+    
+    present_nodes = nodes_per_ts[timestep]
+    for node in present_nodes:
+        nodes.append(node)
+        out_timesteps.append(timestep) 
+        # get_node_timestep_data实际去制作一个个的sample，会有未来的gt，实际推理不能直接用这个方法取样本
+        batch.append(get_node_timestep_data_for_infer(env, scene, timestep, node, state, pred_state,
+                                            edge_types, max_ht, max_ft, hyperparams,
+                                            scene_graph=scene_graph))
     if len(out_timesteps) == 0:
         return None
     return collate(batch), nodes, out_timesteps

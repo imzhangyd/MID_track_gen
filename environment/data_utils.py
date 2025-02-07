@@ -17,8 +17,8 @@ def make_continuous_copy(alpha):
 
 
 def derivative_of(x, dt=1, radian=False):
-    if radian:
-        x = make_continuous_copy(x)
+    if radian: # 如果是弧度制
+        x = make_continuous_copy(x) # 避免角度跳变，因为角度是周期性的
 
     if x[~np.isnan(x)].shape[-1] < 2:
         return np.zeros_like(x)

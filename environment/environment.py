@@ -5,6 +5,11 @@ from .node_type import NodeTypeEnum
 
 
 class Environment(object):
+    '''
+    pkl中存的该类的实例，原始数据会预处理得到pkl文件
+    该文件存储了：scenes，节点类型，注意力半径，机器人类型，标准化参数
+    功能有：获取边的类型，获取标准化参数，标准化，反标准化
+    '''
     def __init__(self, node_type_list, standardization, scenes=None, attention_radius=None, robot_type=None):
         self.scenes = scenes
         self.node_type_list = node_type_list
