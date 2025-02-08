@@ -66,6 +66,7 @@ class MID():
                 ph = self.hyperparams['prediction_horizon']
                 max_hl = self.hyperparams['maximum_history_length']
 
+                _mean, _std = self.eval_env.get_standardize_params(self.hyperparams['state'][node_type], node_type)
 
                 for i, scene in enumerate(self.eval_scenes): # 遍历每个要eval的视频
                     print(f"----- Evaluating Scene {i + 1}/{len(self.eval_scenes)}")
@@ -81,7 +82,7 @@ class MID():
                         test_batch = batch[0]
                         nodes = batch[1]
                         timesteps_o = batch[2] # sample是设置采样的数量，也就是生成的结果的个数
-                        traj_pred = self.model.generate(test_batch, node_type, num_points=ph, sample=self.config.k_eval,bestof=True) # B * 20 * 12 * 2
+                        traj_pred = self.model.generate(test_batch, node_type, num_points=ph, sample=self.config.k_eval,bestof=True, v_std=_std[2:4]) # B * 20 * 12 * 2
                         # 预测的轨迹traj_pred
                         predictions = traj_pred
                         predictions_dict = {}
@@ -142,6 +143,7 @@ class MID():
         ph = self.hyperparams['prediction_horizon']
         max_hl = self.hyperparams['maximum_history_length']
 
+        _mean, _std = self.eval_env.get_standardize_params(self.hyperparams['state'][node_type], node_type)
 
         for i, scene in enumerate(self.eval_scenes):
             print(f"----- Evaluating Scene {i + 1}/{len(self.eval_scenes)}")
@@ -153,11 +155,11 @@ class MID():
                                hyperparams=self.hyperparams)
                 if batch is None:
                     continue
-                ipdb.set_trace()
+                # ipdb.set_trace()
                 test_batch = batch[0] # len=9 
                 nodes = batch[1] # 这些node本身包含了hist信息
                 timesteps_o = batch[2]
-                traj_pred = self.model.generate(test_batch, node_type, num_points=ph, sample=self.config.k_eval, bestof=True, sampling=sampling, step=step) # B * 20 * 12 * 2
+                traj_pred = self.model.generate(test_batch, node_type, num_points=ph, sample=self.config.k_eval, bestof=True, sampling=sampling, step=step, v_std=_std[2:4]) # B * 20 * 12 * 2
 
                 predictions = traj_pred
                 predictions_dict = {}

@@ -276,23 +276,24 @@ def get_node_timestep_data_for_infer(env, scene, t, node, state, pred_state,
     timestep_range_x = np.array([t - max_ht, t])
     # timestep_range_y = np.array([t + 1, t + max_ft])
     # x 是 input序列数据 (8时间步,6dim) y是output(12时间步, 2dim)
-    x = node.get(timestep_range_x, state[node.type])
+    x = node.get(timestep_range_x, state[node.type]) # 8，6 一条样本的轨迹，没有归一化，是以历史轨迹的所有的点的中心做了一个中心化，把原点移到图中心而已
     # y = node.get(timestep_range_y, pred_state[node.type])
     first_history_index = (max_ht - node.history_points_at(t)).clip(0)
 
-    _, std = env.get_standardize_params(state[node.type], node.type)
-    std[0:2] = env.attention_radius[(node.type, node.type)]
+    _mean, std = env.get_standardize_params(state[node.type], node.type)
+    # print(_mean, std) # 
+    std[0:2] = env.attention_radius[(node.type, node.type)] # 对于绝对坐标，这里设置标准差是attention_radius std=[3,3,2,2,1,1]
     rel_state = np.zeros_like(x[0])
-    rel_state[0:2] = np.array(x)[-1, 0:2] # 最近的位置作为中心mean
+    rel_state[0:2] = np.array(x)[-1, 0:2] # 最近的位置作为绝对坐标的mean （最后的坐标，0，0，0，0）
     x_st = env.standardize(x, state[node.type], node.type, mean=rel_state, std=std)
     # if list(pred_state[node.type].keys())[0] == 'position':  # If we predict position we do it relative to current pos
     #     y_st = env.standardize(y, pred_state[node.type], node.type, mean=rel_state[0:2])
     # else:
     #     y_st = env.standardize(y, pred_state[node.type], node.type)
 
-    x_t = torch.tensor(x, dtype=torch.float)# 原坐标系
+    x_t = torch.tensor(x, dtype=torch.float)# 原坐标系 tensor
     # y_t = torch.tensor(y, dtype=torch.float)
-    x_st_t = torch.tensor(x_st, dtype=torch.float)# 最后坐标为中心的坐标系
+    x_st_t = torch.tensor(x_st, dtype=torch.float)# 最后坐标为中心的坐标系,标准化st后tensor
     # y_st_t = torch.tensor(y_st, dtype=torch.float)
 
     # Neighbors

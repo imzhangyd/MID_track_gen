@@ -59,6 +59,7 @@ def seq2env(seq_data,):
     # frame_diff = 10
     # desired_frame_diff = 1
     dt = 0.4 # 两帧之间的时间间隔，s为单位，在求速度的时候是用到了的
+    # dt = 1.0 # 两帧之间的时间间隔，s为单位，在求速度的时候是用到了的
 
     data_columns = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration'], ['x', 'y']])
 
@@ -144,9 +145,9 @@ def seq2env(seq_data,):
         # scene类，记录视频信息，视频帧数，帧间隔，视频名字，增广函数，所有的轨迹scene.nodes（Node）
         scene.nodes.append(node)
 
-    print(scene)
+    # print(scene)
     scenes.append(scene) # 多个视频的scene
-    print(f'Processed {len(scenes):.2f} scene')
+    # print(f'Processed {len(scenes):.2f} scene')
 
     env.scenes = scenes
 
@@ -155,7 +156,7 @@ def seq2env(seq_data,):
 
 
 
-def pred_traj( # 只是参考，eval流程
+def pred_traj(
         traj_hist_env,
         model, # 预测模型
         hyperparams,
@@ -176,7 +177,8 @@ def pred_traj( # 只是参考，eval流程
         # timesteps：要取的轨迹的帧的范围
         timesteps = np.arange(max(0, scene.timesteps - max_hl), scene.timesteps)
         # 需要确认这里取数据的方法
-        
+        # ipdb.set_trace()
+        _mean, _std = traj_hist_env.get_standardize_params(hyperparams['state'][node_type], node_type)
         batch = get_timesteps_data_for_infer(
             env=traj_hist_env, scene=scene, t=timesteps, node_type=node_type, state=hyperparams['state'],
             pred_state=hyperparams['pred_state'], edge_types=traj_hist_env.get_edge_types(),
@@ -185,10 +187,11 @@ def pred_traj( # 只是参考，eval流程
         # 每个batch 有collate(batch), nodes, out_timesteps
         if batch is None:
             continue
-        test_batch = batch[0]
-        nodes = batch[1] # n, 8, 6
-        timesteps_o = batch[2] # sample是设置采样的数量，也就是生成的结果的个数
-        traj_pred = model.generate(test_batch, node_type, num_points=ph, sample=config.k_eval,bestof=True) # B * 20 * 12 * 2
+        test_batch = batch[0] # 有9个内容
+        nodes = batch[1] # node list
+        timesteps_o = batch[2] # 预测帧 list
+        # test_batch就是batch数据，包含了历史轨迹的信息，以及需要预测的轨迹的信息
+        traj_pred = model.generate(test_batch, node_type, num_points=ph, sample=config.k_eval,bestof=True,sampling = "ddpm",step=100,v_std=_std[2:4]) # B * 20 * 12 * 2
         # 预测的轨迹traj_pred
         predictions = traj_pred
         predictions_dict = {}
@@ -268,13 +271,6 @@ def main():
     # 设定轨迹的数量
     num_trajectories = 10
 
-    # 设定历史的时间步长
-    timesteps = 10
-
-    # 设定模型推理的参数
-    sampling = "ddim"
-    steps = 5
-
 
     # -----------------采用原build的方式加载模型----------------
 
@@ -317,14 +313,6 @@ def main():
     #     'pos_x': init_pos[:, 0],
     #     'pos_y': init_pos[:, 1]
     # })
-
-
-    # 为了方便，将轨迹的第一帧复制一份，作为第二帧
-    # fake_df = traj_hist_df.copy()
-    # fake_df['frame_id'] = 1
-    # traj_hist_df = pd.concat([traj_hist_df, fake_df], ignore_index=True)
-    
-    # train_data_loader, traj_hist_env = preprocess_input(traj_hist_df, hyperparams, config)
 
     # 2 转换成原模型的数据格式 pkl 存储env类的实例
     traj_hist_env, mean_value = seq2env(traj_hist_df)
