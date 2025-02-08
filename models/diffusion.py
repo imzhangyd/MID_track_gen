@@ -108,7 +108,7 @@ class DiffusionTraj(Module):
 
                 x_t = traj[t]
                 beta = self.var_sched.betas[[t]*batch_size]
-                e_theta = self.net(x_t, beta=beta, context=context)
+                e_theta = self.net(x_t, beta=beta, context=context) # 在条件下预测噪声参数，self.net 是 TransformerConcatLinear
                 if sampling == "ddpm":
                     x_next = c0 * (x_t - c1 * e_theta) + sigma * z
                 elif sampling == "ddim":

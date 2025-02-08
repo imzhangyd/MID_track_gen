@@ -7,12 +7,12 @@ import pickle
 
 from environment import Environment, Scene, Node, derivative_of
 
-desired_max_time = 100
-pred_indices = [2, 3]
-state_dim = 6
-frame_diff = 10
-desired_frame_diff = 1
-dt = 0.4
+# desired_max_time = 100
+# pred_indices = [2, 3]
+# state_dim = 6
+# frame_diff = 10
+# desired_frame_diff = 1
+dt = 1.0
 
 standardization = {
     'PEDESTRIAN': {
@@ -25,8 +25,8 @@ standardization = {
             'y': {'mean': 0, 'std': 2}
         },
         'acceleration': {
-            'x': {'mean': 0, 'std': 1},
-            'y': {'mean': 0, 'std': 1}
+            'x': {'mean': 0, 'std': 3},
+            'y': {'mean': 0, 'std': 3}
         }
     }
 }
@@ -92,14 +92,15 @@ def augment(scene):
 nl = 0
 l = 0
 
-data_folder_name = 'processed_data_noise'
+data_folder_name = 'processed_data_noise_dt1_std323'
 
 maybe_makedirs(data_folder_name)
 data_columns = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration'], ['x', 'y']])
 
 # Process ETH-UCY
 # for desired_source in ['eth', 'hotel', 'univ', 'zara1', 'zara2']:
-for desired_source in ['microtubule_high', 'receptor_high', 'vesicle_high']:
+# for desired_source in ['microtubule_high', 'receptor_high', 'vesicle_high']:
+for desired_source in ['vesicle_low']:
     for data_class in ['train', 'val', 'test']:
         env = Environment(node_type_list=['PEDESTRIAN'], standardization=standardization)
         attention_radius = dict()
@@ -190,6 +191,7 @@ for desired_source in ['microtubule_high', 'receptor_high', 'vesicle_high']:
 
         env.scenes = scenes
 
+        os.makedirs(data_folder_name, exist_ok=True)
         if len(scenes) > 0:
             with open(data_dict_path, 'wb') as f:
                 dill.dump(env, f, protocol=dill.HIGHEST_PROTOCOL) #保存Environmnet class

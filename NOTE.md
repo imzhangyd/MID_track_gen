@@ -167,5 +167,7 @@ python main.py --config configs/microtubule_low.yaml --dataset microtubule_low
 
 python main.py --config configs/receptor_low.yaml --dataset receptor_low
 
+python main.py --config configs/vesicle_low.yaml --dataset vesicle_low
+
 
 
