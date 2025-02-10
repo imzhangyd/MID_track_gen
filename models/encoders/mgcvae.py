@@ -984,7 +984,7 @@ class MultimodalGenerativeCVAE(object):
         :return: Scalar tensor -> nll loss
         """
         mode = ModeKeys.TRAIN
-
+        # 如果不编码邻居和edge信息，则不会用到非归一化的input，只用了x_st做历史编码，y_st
         x, x_nr_t, y_e, y_r, y, n_s_t0 = self.obtain_encoded_tensors(mode=mode,
                                                                      inputs=inputs, # [bs, hist_len, input_dim] 
                                                                      inputs_st=inputs_st, # [bs, hist_len, input_dim]

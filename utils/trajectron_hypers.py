@@ -76,7 +76,7 @@ def get_traj_hypers():
     'scene_freq_mult_train': False,
     'scene_freq_mult_eval': False,
     'scene_freq_mult_viz': False,
-    'edge_encoding': True,
+    'edge_encoding': False,
     'use_map_encoding': False,
     'augment': True,
     'override_attention_radius': [],

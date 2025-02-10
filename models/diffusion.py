@@ -4,6 +4,7 @@ from torch.nn import Module, Parameter, ModuleList
 import numpy as np
 import torch.nn as nn
 from .common import *
+import ipdb
 import pdb
 
 class VarianceSchedule(Module):
@@ -64,7 +65,7 @@ class DiffusionTraj(Module):
         self.net = net
         self.var_sched = var_sched
 
-    def get_loss(self, x_0, context, t=None): 
+    def get_loss(self, x_0, context, t=None):  # x_0是未归一化的数据，没有做速度的方差归一化
         # x_0 是 bs,futurelen, outdim 是label; context是bs，featdim=256
         batch_size, _, point_dim = x_0.size()
         if t == None: # # 采样出每个样本不同的t（t在step范围内）
@@ -93,14 +94,15 @@ class DiffusionTraj(Module):
             else:
                 x_T = torch.zeros([batch_size, num_points, point_dim]).to(context.device)
             traj = {self.var_sched.num_steps: x_T}
-            stride = step
+            # stride = step # 实际上这里的step不是step，而是stride
+            stride = self.var_sched.num_steps // step
             #stride = int(100/stride)
             for t in range(self.var_sched.num_steps, 0, -stride):
                 z = torch.randn_like(x_T) if t > 1 else torch.zeros_like(x_T)
-                alpha = self.var_sched.alphas[t]
-                alpha_bar = self.var_sched.alpha_bars[t]
-                alpha_bar_next = self.var_sched.alpha_bars[t-stride]
-                #pdb.set_trace()
+                alpha = self.var_sched.alphas[t]# 101个  从1到0.95
+                alpha_bar = self.var_sched.alpha_bars[t] # 是alpha的累计乘积，“数据保留量”
+                alpha_bar_next = self.var_sched.alpha_bars[t-stride] # self.var_sched.alpha_bars 101个
+                # ipdb.set_trace()
                 sigma = self.var_sched.get_sigmas(t, flexibility)
 
                 c0 = 1.0 / torch.sqrt(alpha)

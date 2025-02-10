@@ -58,8 +58,8 @@ def seq2env(seq_data,):
     # state_dim = 6
     # frame_diff = 10
     # desired_frame_diff = 1
-    dt = 0.4 # 两帧之间的时间间隔，s为单位，在求速度的时候是用到了的
-    # dt = 1.0 # 两帧之间的时间间隔，s为单位，在求速度的时候是用到了的
+    # dt = 0.4 # 两帧之间的时间间隔，s为单位，在求速度的时候是用到了的
+    dt = 1.0 # 两帧之间的时间间隔，s为单位，在求速度的时候是用到了的
 
     data_columns = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration'], ['x', 'y']])
 
@@ -191,7 +191,7 @@ def pred_traj(
         nodes = batch[1] # node list
         timesteps_o = batch[2] # 预测帧 list
         # test_batch就是batch数据，包含了历史轨迹的信息，以及需要预测的轨迹的信息
-        traj_pred = model.generate(test_batch, node_type, num_points=ph, sample=config.k_eval,bestof=True,sampling = "ddpm",step=100,v_std=_std[2:4]) # B * 20 * 12 * 2
+        traj_pred = model.generate(test_batch, node_type, num_points=ph, sample=config.k_eval,bestof=True,sampling = "ddpm",step=1)#,v_std=_std[2:4]) # B * 20 * 12 * 2
         # 预测的轨迹traj_pred
         predictions = traj_pred
         predictions_dict = {}
@@ -232,7 +232,8 @@ def update_traj(
 def parse_args():
     parser = argparse.ArgumentParser(
         description='Pytorch implementation of MID')
-    parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_low_future1_sample1_inf.yaml')
+    # parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_low_future1_sample1_inf.yaml')
+    parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_low_future1_sample1_dt1_std323_inf.yaml')
     parser.add_argument('--dataset', default='vesicle_low')
     return parser.parse_args()
 

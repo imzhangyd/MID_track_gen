@@ -82,7 +82,7 @@ class MID():
                         test_batch = batch[0]
                         nodes = batch[1]
                         timesteps_o = batch[2] # sample是设置采样的数量，也就是生成的结果的个数
-                        traj_pred = self.model.generate(test_batch, node_type, num_points=ph, sample=self.config.k_eval,bestof=True, v_std=_std[2:4]) # B * 20 * 12 * 2
+                        traj_pred = self.model.generate(test_batch, node_type, num_points=ph, sample=self.config.k_eval,bestof=True,step=100) #, v_std=_std[2:4]) # B * 20 * 12 * 2
                         # 预测的轨迹traj_pred
                         predictions = traj_pred
                         predictions_dict = {}
@@ -159,7 +159,7 @@ class MID():
                 test_batch = batch[0] # len=9 
                 nodes = batch[1] # 这些node本身包含了hist信息
                 timesteps_o = batch[2]
-                traj_pred = self.model.generate(test_batch, node_type, num_points=ph, sample=self.config.k_eval, bestof=True, sampling=sampling, step=step, v_std=_std[2:4]) # B * 20 * 12 * 2
+                traj_pred = self.model.generate(test_batch, node_type, num_points=ph, sample=self.config.k_eval, bestof=True, sampling=sampling, step=step) #, v_std=_std[2:4]) # B * 20 * 12 * 2
 
                 predictions = traj_pred
                 predictions_dict = {}
@@ -249,10 +249,10 @@ class MID():
         构建编码器的配置，加载train val 数据
         '''
         self.hyperparams = get_traj_hypers()
-        self.hyperparams['enc_rnn_dim_edge'] = self.config.encoder_dim//2
-        self.hyperparams['enc_rnn_dim_edge_influence'] = self.config.encoder_dim//2
-        self.hyperparams['enc_rnn_dim_history'] = self.config.encoder_dim//2
-        self.hyperparams['enc_rnn_dim_future'] = self.config.encoder_dim//2
+        self.hyperparams['enc_rnn_dim_edge'] = self.config.encoder_dim#//2
+        self.hyperparams['enc_rnn_dim_edge_influence'] = self.config.encoder_dim#//2
+        self.hyperparams['enc_rnn_dim_history'] = self.config.encoder_dim#//2
+        self.hyperparams['enc_rnn_dim_future'] = self.config.encoder_dim#//2
         # registar
         self.registrar = ModelRegistrar(self.model_dir, "cuda")
 

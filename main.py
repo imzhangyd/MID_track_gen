@@ -47,11 +47,11 @@ def main():
     #
     # pprint(keys)
 
-    sampling = "ddim"
-    steps = 5
+    sampling = "ddpm"
+    steps = 100
 
     if config["eval_mode"]:
-        agent.eval(sampling, 100//steps)
+        agent.eval(sampling, steps)
     else:
         agent.train()
 
