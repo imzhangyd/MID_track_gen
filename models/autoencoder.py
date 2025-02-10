@@ -40,10 +40,10 @@ class AutoEncoder(Module):
         dynamics = self.encoder.node_models_dict[node_type].dynamic
         encoded_x = self.encoder.get_latent(batch, node_type)
         predicted_y_vel =  self.diffusion.sample(num_points, encoded_x,sample,bestof, flexibility=flexibility, ret_traj=ret_traj, sampling=sampling, step=step)
-        # if v_std is not None: # 假设输入的v_std是一个list     因为在训练的时候，y用的是非方差标准化数据，所以这里也不用
-        #     v_std = torch.tensor(v_std).float().to(predicted_y_vel.device)
-        #     v_std = v_std.unsqueeze(0).unsqueeze(0).unsqueeze(0)
-        #     predicted_y_vel = predicted_y_vel * v_std
+        if v_std is not None: # 假设输入的v_std是一个list     因为在训练的时候，y用的是非方差标准化数据，所以这里也不用
+            v_std = torch.tensor(v_std).float().to(predicted_y_vel.device)
+            v_std = v_std.unsqueeze(0).unsqueeze(0).unsqueeze(0)
+            predicted_y_vel = predicted_y_vel * v_std
         predicted_y_pos = dynamics.integrate_samples(predicted_y_vel)
         return predicted_y_pos.cpu().detach().numpy()
 
@@ -56,5 +56,6 @@ class AutoEncoder(Module):
          map) = batch # dataset 的内容
 
         feat_x_encoded = self.encode(batch,node_type) # B * 64
-        loss = self.diffusion.get_loss(y_t.cuda(), feat_x_encoded)
+        # loss = self.diffusion.get_loss(y_t.cuda(), feat_x_encoded)
+        loss = self.diffusion.get_loss(y_st_t.cuda(), feat_x_encoded)
         return loss

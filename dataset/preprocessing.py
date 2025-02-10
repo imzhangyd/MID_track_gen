@@ -105,7 +105,7 @@ def get_node_timestep_data(env, scene, t, node, state, pred_state,
     if list(pred_state[node.type].keys())[0] == 'position':  # If we predict position we do it relative to current pos
         y_st = env.standardize(y, pred_state[node.type], node.type, mean=rel_state[0:2])
     else:
-        y_st = env.standardize(y, pred_state[node.type], node.type) # yst也是做了归一化的吧
+        y_st = env.standardize(y, pred_state[node.type], node.type) # y_st也是做了归一化的
 
     x_t = torch.tensor(x, dtype=torch.float)# 原坐标系
     y_t = torch.tensor(y, dtype=torch.float)

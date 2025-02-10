@@ -74,8 +74,8 @@ def seq2env(seq_data,):
                 'y': {'mean': 0, 'std': 2}
             },
             'acceleration': {
-                'x': {'mean': 0, 'std': 1},
-                'y': {'mean': 0, 'std': 1}
+                'x': {'mean': 0, 'std': 3},
+                'y': {'mean': 0, 'std': 3}
             }
         }
     }
@@ -191,7 +191,7 @@ def pred_traj(
         nodes = batch[1] # node list
         timesteps_o = batch[2] # 预测帧 list
         # test_batch就是batch数据，包含了历史轨迹的信息，以及需要预测的轨迹的信息
-        traj_pred = model.generate(test_batch, node_type, num_points=ph, sample=config.k_eval,bestof=True,sampling = "ddpm",step=1)#,v_std=_std[2:4]) # B * 20 * 12 * 2
+        traj_pred = model.generate(test_batch, node_type, num_points=ph, sample=config.k_eval,bestof=True,sampling = "ddpm", step=1 ,v_std=_std[2:4]) # B * 20 * 12 * 2
         # 预测的轨迹traj_pred
         predictions = traj_pred
         predictions_dict = {}
@@ -233,7 +233,9 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description='Pytorch implementation of MID')
     # parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_low_future1_sample1_inf.yaml')
-    parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_low_future1_sample1_dt1_std323_inf.yaml')
+    # parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_low_future1_sample1_dt1_std323_inf.yaml')
+    # parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_low_future1_sample1_dt1_std323_del_neighbor_inf.yaml')
+    parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_low_future1_sample1_dt1_std323_del_neighbor_label_yst_inf.yaml')
     parser.add_argument('--dataset', default='vesicle_low')
     return parser.parse_args()
 
@@ -452,7 +454,7 @@ if __name__ == '__main__':
     print(pred_traj)
 
     # 可视化生成的部分
-    vis_gen_traj = pred_traj[pred_traj['frame_id'] > 7]
+    vis_gen_traj = pred_traj[(pred_traj['frame_id'] > 7)& (pred_traj['frame_id'] < 90)]
     vis_tracks(vis_gen_traj,name='generate_traj')
     
     # 计算轨迹的性质
