@@ -100,7 +100,7 @@ data_columns = pd.MultiIndex.from_product([['position', 'velocity', 'acceleratio
 # Process ETH-UCY
 # for desired_source in ['eth', 'hotel', 'univ', 'zara1', 'zara2']:
 # for desired_source in ['microtubule_high', 'receptor_high', 'vesicle_high']:
-for desired_source in ['vesicle_low']:
+for desired_source in ['microtubule_low']:
     for data_class in ['train', 'val', 'test']:
         env = Environment(node_type_list=['PEDESTRIAN'], standardization=standardization)
         attention_radius = dict()

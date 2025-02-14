@@ -94,11 +94,18 @@ class DiffusionTraj(Module):
             else:
                 x_T = torch.zeros([batch_size, num_points, point_dim]).to(context.device)
             traj = {self.var_sched.num_steps: x_T}
-            # stride = step # 实际上这里的step不是step，而是stride
-            stride = self.var_sched.num_steps // step
+            stride = step # 实际上这里的step不是step，而是stride
+            # stride = self.var_sched.num_steps // step
             #stride = int(100/stride)
-            for t in range(self.var_sched.num_steps, 0, -stride):
-                z = torch.randn_like(x_T) if t > 1 else torch.zeros_like(x_T)
+            step_list = list(range(self.var_sched.num_steps, 0, -stride))
+            step_nums = len(step_list)
+            for step_idx, t in enumerate(step_list):
+            # for t in range(self.var_sched.num_steps, 0, -stride):
+                if step_idx == step_nums - 1:
+                    z = torch.zeros_like(x_T)
+                else:
+                    z = torch.randn_like(x_T)
+                # z = torch.randn_like(x_T) if t > 1 else torch.zeros_like(x_T)
                 alpha = self.var_sched.alphas[t]# 101个  从1到0.95
                 alpha_bar = self.var_sched.alpha_bars[t] # 是alpha的累计乘积，“数据保留量”
                 alpha_bar_next = self.var_sched.alpha_bars[t-stride] # self.var_sched.alpha_bars 101个

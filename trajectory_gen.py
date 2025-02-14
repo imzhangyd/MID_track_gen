@@ -156,11 +156,12 @@ def seq2env(seq_data,):
 
 
 
-def pred_traj(
+def pred_traj_func(
         traj_hist_env,
         model, # 预测模型
         hyperparams,
-        config,):
+        config,
+        stride_value):
     model.eval()
 
     node_type = "PEDESTRIAN"
@@ -191,7 +192,7 @@ def pred_traj(
         nodes = batch[1] # node list
         timesteps_o = batch[2] # 预测帧 list
         # test_batch就是batch数据，包含了历史轨迹的信息，以及需要预测的轨迹的信息
-        traj_pred = model.generate(test_batch, node_type, num_points=ph, sample=config.k_eval,bestof=True,sampling = "ddpm", step=1 ,v_std=_std[2:4]) # B * 20 * 12 * 2
+        traj_pred = model.generate(test_batch, node_type, num_points=ph, sample=config.k_eval,bestof=True,sampling = "ddpm", step=stride_value ,v_std=_std[2:4]) # B * 20 * 12 * 2
         # 预测的轨迹traj_pred
         predictions = traj_pred
         predictions_dict = {}
@@ -235,8 +236,22 @@ def parse_args():
     # parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_low_future1_sample1_inf.yaml')
     # parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_low_future1_sample1_dt1_std323_inf.yaml')
     # parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_low_future1_sample1_dt1_std323_del_neighbor_inf.yaml')
-    parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_low_future1_sample1_dt1_std323_del_neighbor_label_yst_inf.yaml')
+    # parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_low_future1_sample1_dt1_std323_del_neighbor_label_yst_inf.yaml')
+
+
+    # parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/microtubule_low_future1_sample1_dt1_std323_del_neighbor_label_yst_inf.yaml')
+    # parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/receptor_low_future1_sample1_dt1_std323_del_neighbor_label_yst_inf.yaml')
+    parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_low_future1_sample1_dt1_std323_del_neighbor_label_yst_repeat_inf.yaml')
+    
+    data_txt_path = '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/vesicle_low/val/VESICLE_snr_7_density_low.txt'
+    # data_txt_path = '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_low/val/MICROTUBULE_snr_7_density_low.txt'
+    # data_txt_path = '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/receptor_low/val/RECEPTOR_snr_7_density_low.txt'
+    
+    parser.add_argument('--data_txt_path', default=data_txt_path)
+
     parser.add_argument('--dataset', default='vesicle_low')
+    # parser.add_argument('--dataset', default='microtubule_low')
+    # parser.add_argument('--dataset', default='receptor_low')
     return parser.parse_args()
 
 def init_data_with_dataset(data_txt_path):
@@ -252,7 +267,7 @@ def init_data_with_dataset(data_txt_path):
 
     filter_trackid_list = []
     for tkid in trackid_list:
-        if len(ori_data[ori_data['track_id'] == tkid]) > 7:
+        if len(ori_data[ori_data['track_id'] == tkid]) > 0:
             filter_trackid_list.append(tkid)
     
     filter_tracks = ori_data[ori_data['track_id'].isin(filter_trackid_list)]
@@ -263,7 +278,7 @@ def init_data_with_dataset(data_txt_path):
         
 
 
-def main():
+def main(stride_value):
 
     np.random.seed(0)
     # 设定视频的空间size 和 时间t的长度
@@ -299,14 +314,23 @@ def main():
     shutil.copy(args.config, os.path.join(model_dir, os.path.basename(args.config)))
     shutil.copy('./utils/trajectron_hypers.py', os.path.join(model_dir, 'trajectron_hypers.py'))
 
-    model = agent.model
+    model_ins = agent.model
     hyperparams = agent.hyperparams
 
+    # 保存路径
+    # 创建生成轨迹保存路径
+    ckpt_path = config.ckpt_path
+    save_folder = ckpt_path.replace('.pt', '_same_density')
+    save_folder = os.path.join(save_folder, f'stride_{stride_value}')
+    os.makedirs(save_folder, exist_ok=True)
+
     # -----------------制作当前iter的数据集--------------------
-    data_txt_path = '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/vesicle_low/val/VESICLE_snr_7_density_low.txt'
+    
+    data_txt_path = config['data_txt_path']
     traj_hist_df = init_data_with_dataset(data_txt_path)
     init_traj_df = traj_hist_df.copy()
-    vis_tracks(traj_hist_df,name='ini_traj')
+    vis_tracks(traj_hist_df,name=os.path.join(save_folder,'ini_traj'))
+    shutil.copy(data_txt_path, os.path.join(save_folder, os.path.split(data_txt_path)[-1]))
     # 1 构建一个初始化的数据分布
     # init_pos = np.random.rand(num_trajectories, 2) * video_width
 
@@ -324,11 +348,13 @@ def main():
     
     for i in tqdm(range(video_timepoints),desc='生成轨迹'):
         # 预测轨迹
-        predictions_dict = pred_traj(
+        # print(stride_value , type(stride_value))
+        predictions_dict = pred_traj_func(
             traj_hist_env, 
-            model, 
+            model_ins, 
             hyperparams,
             config,
+            stride_value
             )
         # ipdb.set_trace()
         # 更新轨迹
@@ -338,7 +364,7 @@ def main():
             # 重新制作数据集
             traj_hist_env, mean_value = seq2env(traj_hist_df)
 
-    return traj_hist_df, init_traj_df
+    return traj_hist_df, init_traj_df, config
 
 def vis_tracks(pred_traj, name=None):
     # 设置图的大小（单位为英寸）
@@ -449,17 +475,38 @@ def cal_msd_sim(df1, df2):
         print("Mann-Whitney U-test: 两组轨迹的扩散系数没有显著差异")
 
 
-if __name__ == '__main__':
-    pred_traj, init_traj_df = main()
-    print(pred_traj)
+def save_generated_traj(traj_df, path, old_framenum):
+    traj_df = traj_df[traj_df['frame_id'] >= old_framenum]
+    traj_df.loc[:, 'frame_id'] = traj_df['frame_id'] - old_framenum
+    traj_df.to_csv(f'{path}', header=True, index=False)
 
-    # 可视化生成的部分
-    vis_gen_traj = pred_traj[(pred_traj['frame_id'] > 7)& (pred_traj['frame_id'] < 90)]
-    vis_tracks(vis_gen_traj,name='generate_traj')
-    
-    # 计算轨迹的性质
-    df1 = init_traj_df
-    df2 = vis_gen_traj
-    cal_msd_sim(df1, df2)
+if __name__ == '__main__':
+    # stride = 1
+    for stride in [1,2,4,5,10,20,50,100]: # steps对应[100,50,25,20,10,5,2,1]
+        pred_traj, init_traj_df, config = None, None, None
+        new_gen_frame_start = 8
+        print(stride, type(stride))
+        pred_traj, init_traj_df, config = main(stride)
+        # 创建生成轨迹保存路径
+        ckpt_path = config.ckpt_path
+        save_folder = ckpt_path.replace('.pt', '_same_density')
+        save_folder = os.path.join(save_folder, f'stride_{stride}')
+        os.makedirs(save_folder, exist_ok=True)
+        
+        # print(pred_traj)
+        # 保存生成的轨迹
+        save_generated_traj(pred_traj, path=os.path.join(save_folder,'generate_tracks.csv'), old_framenum=new_gen_frame_start)
+        
+        # 可视化生成的部分
+        vis_tracks(pred_traj[pred_traj['frame_id'] >= new_gen_frame_start],name=os.path.join(save_folder,'generate_traj_all'))
+        frame_start = new_gen_frame_start
+        frame_end = new_gen_frame_start * 2  # 8---15
+        vis_gen_traj = pred_traj[(pred_traj['frame_id'] >= frame_start)& (pred_traj['frame_id'] < frame_end)]
+        vis_tracks(vis_gen_traj,name=os.path.join(save_folder,f'generate_traj_frame{frame_start}_{frame_end-1}'))
+        
+        # # 计算轨迹的性质
+        # df1 = init_traj_df
+        # df2 = vis_gen_traj
+        # cal_msd_sim(df1, df2)
 
 

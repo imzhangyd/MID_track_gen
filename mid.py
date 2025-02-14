@@ -160,7 +160,7 @@ class MID():
                 nodes = batch[1] # 这些node本身包含了hist信息
                 timesteps_o = batch[2]
                 traj_pred = self.model.generate(test_batch, node_type, num_points=ph, sample=self.config.k_eval, bestof=True, sampling=sampling, step=step, v_std=_std[2:4]) # B * 20 * 12 * 2
-
+                # 恢复了原尺度的delta
                 predictions = traj_pred
                 predictions_dict = {}
                 for i, ts in enumerate(timesteps_o):
@@ -194,9 +194,9 @@ class MID():
         elif self.config.dataset == "sdd":
             ade = ade * 50
             fde = fde * 50
-        print(f"Sampling: {sampling} Stride: {step}")
+        print(f"Sampling: {sampling} stride: {step}")
         print(f"Epoch {epoch} | ADE: {ade} FDE: {fde}")
-        #self.log.info(f"| Epoch {epoch} ADE: {ade} FDE: {fde}")
+        self.log.info(f"| Epoch {epoch} stride: {step} ADE: {ade} FDE: {fde}")
 
 
     def _build(self):
@@ -255,13 +255,20 @@ class MID():
         self.hyperparams['enc_rnn_dim_future'] = self.config.encoder_dim#//2
         # registar
         self.registrar = ModelRegistrar(self.model_dir, "cuda")
-
+        
         if self.config.eval_mode:
-            epoch = self.config.eval_at
-            checkpoint_dir = osp.join(self.model_dir, f"{self.config.dataset}_epoch{epoch}.pt")
-            self.checkpoint = torch.load(osp.join(self.model_dir, f"{self.config.dataset}_epoch{epoch}.pt"), map_location = "cpu")
+            # epoch = self.config.eval_at
+            # checkpoint_dir = osp.join(self.model_dir, f"{self.config.dataset}_epoch{epoch}.pt")
+            # self.checkpoint = torch.load(osp.join(self.model_dir, f"{self.config.dataset}_epoch{epoch}.pt"), map_location = "cpu")
 
-            self.registrar.load_models(self.checkpoint['encoder'])
+            # self.registrar.load_models(self.checkpoint['encoder'])
+            # 添加预训练的checkpoint
+            if self.config.ckpt_path:
+                checkpoint_path = self.config.ckpt_path
+                self.checkpoint = torch.load(checkpoint_path, map_location = "cpu")
+                self.registrar.load_models(self.checkpoint['encoder'])
+            else:
+                raise Exception("No checkpoint provided for evaluation")
 
 
         with open(self.train_data_path, 'rb') as f:
