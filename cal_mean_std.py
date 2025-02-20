@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+import ipdb
 
 '''
 计算一个视频中轨迹的特征的均值和方差
@@ -6,21 +8,27 @@ import numpy as np
 
 def calculate_mean_std(file_path, dt=1):
     data = np.loadtxt(file_path, delimiter='\t')
+    data = pd.read_csv(file_path, sep='\t', header=None, index_col=None)
+    data.columns=['frame_index','track_id','pos_x','pos_y']
+
+    pos_x = data['pos_x'].values
+    pos_y = data['pos_y'].values
     
-    frame_id = data[:, 0]
-    track_id = data[:, 1]
-    pos_x = data[:, 2]
-    pos_y = data[:, 3]
-    
-    unique_tracks = np.unique(track_id)
+    unique_tracks = np.unique(data['track_id'].values)
     
     velocities = []
     accelerations = []
     
     for track in unique_tracks:
-        track_indices = np.where(track_id == track)
-        track_pos_x = pos_x[track_indices]
-        track_pos_y = pos_y[track_indices]
+        
+        this_track = data[data['track_id']== track]
+        this_track = this_track.sort_values('frame_index')
+
+        track_pos_x = this_track['pos_x'].values
+        track_pos_y = this_track['pos_y'].values
+
+        if len(track_pos_x) < 2:
+            continue  # 忽略长度小于2的轨迹
         
         vel_x = np.diff(track_pos_x) / dt
         vel_y = np.diff(track_pos_y) / dt
@@ -28,6 +36,9 @@ def calculate_mean_std(file_path, dt=1):
         acc_x = np.diff(vel_x) / dt
         acc_y = np.diff(vel_y) / dt
         
+        if vel_x.max() > 30 or vel_y.max() > 30:
+            ipdb.set_trace()
+            print(this_track)
         velocities.append(np.column_stack((vel_x, vel_y)))
         accelerations.append(np.column_stack((acc_x, acc_y)))
     
@@ -64,6 +75,6 @@ def calculate_mean_std(file_path, dt=1):
         'acc_y_std': acc_y_std
     }
 
-file_path = '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/vesicle_low/train/VESICLE_snr_1_density_low.txt'
+file_path = '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/helab_vesicle/train/vesicle_FP_C1_5.txt'
 results = calculate_mean_std(file_path)
 print(results)

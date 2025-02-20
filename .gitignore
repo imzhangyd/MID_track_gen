@@ -5,3 +5,4 @@ processed_data_noise
 *.pyc
 ptc_challenge_data
 raw_data
+processed_data_noise**/

@@ -13,6 +13,7 @@ from environment import Environment, Scene, Node, derivative_of
 # frame_diff = 10
 # desired_frame_diff = 1
 dt = 1.0
+frame_diff = 1
 
 standardization = {
     'PEDESTRIAN': {
@@ -25,8 +26,8 @@ standardization = {
             'y': {'mean': 0, 'std': 2}
         },
         'acceleration': {
-            'x': {'mean': 0, 'std': 3},
-            'y': {'mean': 0, 'std': 3}
+            'x': {'mean': 0, 'std': 2},
+            'y': {'mean': 0, 'std': 2}
         }
     }
 }
@@ -92,7 +93,7 @@ def augment(scene):
 nl = 0
 l = 0
 
-data_folder_name = 'processed_data_noise_dt1_std323'
+data_folder_name = 'processed_data_noise_dt1_std322'
 
 maybe_makedirs(data_folder_name)
 data_columns = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration'], ['x', 'y']])
@@ -100,8 +101,8 @@ data_columns = pd.MultiIndex.from_product([['position', 'velocity', 'acceleratio
 # Process ETH-UCY
 # for desired_source in ['eth', 'hotel', 'univ', 'zara1', 'zara2']:
 # for desired_source in ['microtubule_high', 'receptor_high', 'vesicle_high']:
-for desired_source in ['microtubule_low']:
-    for data_class in ['train', 'val', 'test']:
+for desired_source in ['helab_vesicle']:
+    for data_class in ['train', 'val']:
         env = Environment(node_type_list=['PEDESTRIAN'], standardization=standardization)
         attention_radius = dict()
         attention_radius[(env.NodeType.PEDESTRIAN, env.NodeType.PEDESTRIAN)] = 3.0
@@ -122,7 +123,7 @@ for desired_source in ['microtubule_low']:
                     data['frame_id'] = pd.to_numeric(data['frame_id'], downcast='integer')
                     data['track_id'] = pd.to_numeric(data['track_id'], downcast='integer')
 
-                    data['frame_id'] = data['frame_id'] // 10 # 转变frame id
+                    data['frame_id'] = data['frame_id'] // frame_diff # 转变frame id
 
                     data['frame_id'] -= data['frame_id'].min()
 

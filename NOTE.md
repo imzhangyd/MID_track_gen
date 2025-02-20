@@ -160,7 +160,7 @@ fde是最后一个位置上的均方误差
 不同的粒子运动状态，以及一些细胞的轨迹都可以。
 
 
-## 制作粒子/细胞数据集
+## 训练
 
 
 python main.py --config configs/microtubule_low.yaml --dataset microtubule_low
@@ -171,3 +171,9 @@ python main.py --config configs/vesicle_low.yaml --dataset vesicle_low
 
 
 
+
+## 准备训练预测坐标的数据集样本文件
+
+python process_data.py
+
+## 

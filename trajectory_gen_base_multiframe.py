@@ -4,6 +4,10 @@
 之后，预测每个轨迹的未来坐标，更新轨迹，迭代执行
 日期：2025年2月6日
 作者：张玉冬
+
+修改:2025年2月19日
+基于视频的多个帧初始化,并生成,并合并起来,用于训练跟踪器
+
 '''
 
 import numpy as np
@@ -74,8 +78,8 @@ def seq2env(seq_data,):
                 'y': {'mean': 0, 'std': 2}
             },
             'acceleration': {
-                'x': {'mean': 0, 'std': 3},
-                'y': {'mean': 0, 'std': 3}
+                'x': {'mean': 0, 'std': 2},
+                'y': {'mean': 0, 'std': 2}
             }
         }
     }
@@ -229,27 +233,44 @@ def update_traj(
     return traj_hist
 
 
-def init_data_with_dataset(data_txt_path):
+def init_data_with_dataset(data_txt_path, frame_interval=1,save_root=None):
     '''
     初始化轨迹，用已有的数据集轨迹，而非random随机生成第一帧
+
+    根据需要的历史长度,构建多个初始化状态
+
     '''
+    init_tracks_list = []
     ori_data = pd.read_csv(data_txt_path, sep='\t', header=None, index_col=None)
     ori_data.columns = ['frame_id', 'track_id', 'pos_x', 'pos_y']
-    ori_data['frame_id'] = ori_data['frame_id'] // 10
-
-    # 找到最后一帧还存在的轨迹，并且长度可以长于7帧的
-    trackid_list = ori_data[ori_data['frame_id'] == 99]['track_id'].values.tolist()
-
-    filter_trackid_list = []
-    for tkid in trackid_list:
-        if len(ori_data[ori_data['track_id'] == tkid]) > 0:
-            filter_trackid_list.append(tkid)
+    ori_data['frame_id'] = ori_data['frame_id'] // frame_interval
+    # 保存基于生成的视频轨迹
+    vis_tracks(ori_data, name=os.path.join(save_root,'base_movie_track'))
     
-    filter_tracks = ori_data[ori_data['track_id'].isin(filter_trackid_list)]
+    video_frames = ori_data['frame_id'].max()
 
-    filter_tracks = filter_tracks[filter_tracks['frame_id'] >= 99 - 7]
+    for end_frame in range(8,video_frames,8):
+        print(f'准备初始状态,结束帧为{end_frame}')
+        # 找到指定帧帧还存在的轨迹，并且长度可以长于7帧的
+        trackid_list = ori_data[ori_data['frame_id'] == end_frame]['track_id'].values.tolist()
+        filter_tracks = ori_data[ori_data['track_id'].isin(trackid_list)]
+        # (截断--后threshold)
+        filter_tracks = filter_tracks[filter_tracks['frame_id'] <= end_frame]
 
-    return filter_tracks
+        # 过滤历史轨迹的长度要求
+        filter_trackid_list = []
+        for tkid in trackid_list:
+            if len(filter_tracks[filter_tracks['track_id'] == tkid]) > 7:
+                filter_trackid_list.append(tkid)
+
+        filter_tracks = filter_tracks[filter_tracks['track_id'].isin(filter_trackid_list)]
+        
+        # 截断不需要的久远历史(截断--前threshold)
+        # filter_tracks = filter_tracks[filter_tracks['frame_id'] >= end_frame - 7]
+
+        init_tracks_list.append(filter_tracks)
+
+    return init_tracks_list
         
 
 def vis_tracks(pred_traj, name=None):
@@ -262,11 +283,14 @@ def vis_tracks(pred_traj, name=None):
 
     # 为每个轨迹分配一个颜色
     colors = plt.cm.viridis(np.linspace(0, 1, len(track_ids)))  # 使用颜色映射生成颜色
-
+    np.random.shuffle(colors)
     # 绘制每个轨迹
     for idx, track_id in enumerate(track_ids):
         track_data = pred_traj[pred_traj['track_id'] == track_id]
-        ax.plot(track_data['pos_x'], track_data['pos_y'], color=colors[idx], linewidth=0.5)
+        track_data = track_data.sort_values(by='frame_id')
+        # if len(track_data)>8:
+        #     ipdb.set_trace()
+        ax.plot(track_data['pos_x'], track_data['pos_y'], color=colors[idx], linewidth=0.2)
 
     # 设置坐标轴范围（根据数据范围调整）
     ax.set_xlim(0, 512)
@@ -309,9 +333,10 @@ def parse_args():
     # parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/receptor_low_future1_sample1_dt1_std323_del_neighbor_label_yst_inf.yaml')
     # parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_low_future1_sample1_dt1_std323_del_neighbor_label_yst_repeat_inf.yaml')
     # parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/vesicle_mid_future1_sample1_dt1_std323_del_neighbor_label_yst_inf.yaml')
-    parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/microtubule_mid_future1_sample1_dt1_std323_del_neighbor_label_yst_inf.yaml')
+    # parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/microtubule_mid_future1_sample1_dt1_std323_del_neighbor_label_yst_inf.yaml')
+    parser.add_argument('--config', default='/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/configs/helab_vesicle_future1_sample1_dt1_std322_del_neighbor_label_yst_inf.yaml')
     
-    data_txt_path = '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/vesicle_low/val/VESICLE_snr_7_density_low.txt'
+    data_txt_path = '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/helab_vesicle/train/vesicle_FP_C1_5.txt'
     # data_txt_path = '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_low/val/MICROTUBULE_snr_7_density_low.txt'
     # data_txt_path = '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/receptor_low/val/RECEPTOR_snr_7_density_low.txt'
     
@@ -320,23 +345,24 @@ def parse_args():
     # parser.add_argument('--dataset', default='vesicle_low')
     # parser.add_argument('--dataset', default='vesicle_mid')
     # parser.add_argument('--dataset', default='microtubule_low')
-    parser.add_argument('--dataset', default='microtubule_mid')
+    parser.add_argument('--dataset', default='helab_vesicle')
     # parser.add_argument('--dataset', default='receptor_low')
 
     # 初始化轨迹的列表
+    parser.add_argument('--data_txt_path_list', nargs="*", type=str, default=None)
     # parser.add_argument('--data_txt_path_list', nargs="*", type=str, default=[
     #     '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_low/test/MICROTUBULE_snr_1_density_low.txt',
     #     '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_low/test/MICROTUBULE_snr_2_density_low.txt',
     #     '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_low/test/MICROTUBULE_snr_4_density_low.txt',
     #     '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_low/test/MICROTUBULE_snr_7_density_low.txt',
     # ], )
-    parser.add_argument('--data_txt_path_list', nargs="*", type=str, default=[
-        '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_mid/test/MICROTUBULE_snr_1_density_mid.txt',
-        '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_mid/test/MICROTUBULE_snr_2_density_mid.txt',
-        '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_mid/test/MICROTUBULE_snr_4_density_mid.txt',
-        '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_mid/test/MICROTUBULE_snr_7_density_mid.txt',
-        '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_mid/val/MICROTUBULE_snr_7_density_mid.txt',
-    ], )
+    # parser.add_argument('--data_txt_path_list', nargs="*", type=str, default=[
+    #     '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_mid/test/MICROTUBULE_snr_1_density_mid.txt',
+    #     '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_mid/test/MICROTUBULE_snr_2_density_mid.txt',
+    #     '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_mid/test/MICROTUBULE_snr_4_density_mid.txt',
+    #     '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_mid/test/MICROTUBULE_snr_7_density_mid.txt',
+    #     '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/microtubule_mid/val/MICROTUBULE_snr_7_density_mid.txt',
+    # ], )
     # parser.add_argument('--data_txt_path_list', nargs="*", type=str, default=[
     #     '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/vesicle_mid/test/VESICLE_snr_1_density_mid.txt',
     #     '/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/raw_data/vesicle_mid/test/VESICLE_snr_2_density_mid.txt',
@@ -354,7 +380,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def main(stride_value):
+def main(stride_value,formatted_time):
 
     np.random.seed(0)
     # 设定视频的空间size 和 时间t的长度
@@ -364,13 +390,6 @@ def main(stride_value):
 
     # 设定轨迹的数量
     num_trajectories = 10
-
-
-    # 获取当前时间
-    current_time = datetime.datetime.now()
-
-    # 格式化时间字符串
-    formatted_time = current_time.strftime("%Y-%m-%d_%H-%M-%S")
 
     # -----------------采用原build的方式加载模型----------------
 
@@ -383,7 +402,7 @@ def main(stride_value):
     else:
         data_txt_path_list = [args.data_txt_path]
     
-    print(f'初始化基于一下{len(data_txt_path_list)}个视频:')
+    print(f'初始化基于以下{len(data_txt_path_list)}个视频:')
     for ite in data_txt_path_list:
         print(ite)
 
@@ -409,64 +428,71 @@ def main(stride_value):
     # 保存路径
     # 创建生成轨迹保存路径
     ckpt_path = config.ckpt_path
-    save_root = ckpt_path.replace('.pt', '_same_density'+f'_{formatted_time}')
+    save_root = ckpt_path.replace('.pt', '_length8'+f'_{formatted_time}')
     save_root = os.path.join(save_root, f'stride_{stride_value}')
     os.makedirs(save_root, exist_ok=True)
 
+    this_codepath=os.path.abspath(__file__)
+    shutil.copy(this_codepath, os.path.join(save_root,'gencode.py'))
+
     # -----------------制作当前iter的数据集--------------------
     for data_txt_path in data_txt_path_list:
-        save_folder = os.path.join(
+        save_root = os.path.join(
             save_root, os.path.split(os.path.split(data_txt_path)[0])[-1]+'_'+os.path.split(data_txt_path)[-1].replace('.txt',''))
-        os.makedirs(save_folder, exist_ok=True)
+        os.makedirs(save_root, exist_ok=True)
         # data_txt_path = config['data_txt_path']
-        traj_hist_df = init_data_with_dataset(data_txt_path)
-        init_traj_df = traj_hist_df.copy()
-        vis_tracks(init_traj_df,name=os.path.join(save_folder,'ini_traj'))
-        shutil.copy(data_txt_path, os.path.join(save_folder, os.path.split(data_txt_path)[-1]))
-        # 1 构建一个初始化的数据分布
-        # init_pos = np.random.rand(num_trajectories, 2) * video_width
+        traj_hist_df_list = init_data_with_dataset(data_txt_path,frame_interval=1,save_root=save_root)
+        for gen_id, traj_hist_df in enumerate(traj_hist_df_list):
+            save_folder = os.path.join(save_root, 'gen_id{}'.format(gen_id))
+            os.makedirs(save_folder,exist_ok=True)
 
-        # traj_hist_df = pd.DataFrame({
-        #     'frame_id': np.zeros(num_trajectories, dtype=int),
-        #     'track_id': np.arange(num_trajectories)+1,
-        #     'pos_x': init_pos[:, 0],
-        #     'pos_y': init_pos[:, 1]
-        # })
+            init_traj_df = traj_hist_df.copy()
+            vis_tracks(init_traj_df,name=os.path.join(save_folder,'ini_traj'))
+            shutil.copy(data_txt_path, os.path.join(save_folder, os.path.split(data_txt_path)[-1]))
+            # 1 构建一个初始化的数据分布
+            # init_pos = np.random.rand(num_trajectories, 2) * video_width
 
-        # 2 转换成原模型的数据格式 pkl 存储env类的实例
-        traj_hist_env, mean_value = seq2env(traj_hist_df)
+            # traj_hist_df = pd.DataFrame({
+            #     'frame_id': np.zeros(num_trajectories, dtype=int),
+            #     'track_id': np.arange(num_trajectories)+1,
+            #     'pos_x': init_pos[:, 0],
+            #     'pos_y': init_pos[:, 1]
+            # })
 
-        # -----------------逐帧推理预测，更新轨迹--------------------
-        
-        for i in tqdm(range(video_timepoints),desc='生成轨迹'):
-            # 预测轨迹
-            # print(stride_value , type(stride_value))
-            predictions_dict = pred_traj_func(
-                traj_hist_env, 
-                model_ins, 
-                hyperparams,
-                config,
-                stride_value
-                )
-            # ipdb.set_trace()
-            # 更新轨迹
-            traj_hist_df = update_traj(traj_hist_df, predictions_dict,mean_value)
-            traj_hist_df = traj_hist_df[['frame_id', 'track_id', 'pos_x', 'pos_y']]
-            if i < video_timepoints-1:
-                # 重新制作数据集
-                traj_hist_env, mean_value = seq2env(traj_hist_df)
-        
-        pred_traj = traj_hist_df.copy()
+            # 2 转换成原模型的数据格式 pkl 存储env类的实例
+            traj_hist_env, mean_value = seq2env(traj_hist_df)
 
-        # 保存生成的轨迹
-        save_generated_traj(pred_traj, path=os.path.join(save_folder,'generate_tracks.csv'), old_framenum=new_gen_frame_start)
-        
-        # 可视化生成的部分
-        vis_tracks(pred_traj[pred_traj['frame_id'] >= new_gen_frame_start],name=os.path.join(save_folder,'generate_traj_all'))
-        frame_start = new_gen_frame_start
-        frame_end = new_gen_frame_start * 2  # 8---15
-        vis_gen_traj = pred_traj[(pred_traj['frame_id'] >= frame_start)& (pred_traj['frame_id'] < frame_end)]
-        vis_tracks(vis_gen_traj,name=os.path.join(save_folder,f'generate_traj_frame{frame_start}_{frame_end-1}'))
+            # -----------------逐帧推理预测，更新轨迹--------------------
+            
+            for i in tqdm(range(video_timepoints),desc='生成轨迹'):
+                # 预测轨迹
+                # print(stride_value , type(stride_value))
+                predictions_dict = pred_traj_func(
+                    traj_hist_env, 
+                    model_ins, 
+                    hyperparams,
+                    config,
+                    stride_value
+                    )
+                # ipdb.set_trace()
+                # 更新轨迹
+                traj_hist_df = update_traj(traj_hist_df, predictions_dict,mean_value)
+                traj_hist_df = traj_hist_df[['frame_id', 'track_id', 'pos_x', 'pos_y']]
+                if i < video_timepoints-1:
+                    # 重新制作数据集
+                    traj_hist_env, mean_value = seq2env(traj_hist_df)
+            
+            pred_traj = traj_hist_df.copy()
+
+            # 保存生成的轨迹
+            save_generated_traj(pred_traj, path=os.path.join(save_folder,'generate_tracks.csv'), old_framenum=new_gen_frame_start)
+            
+            # 可视化生成的部分
+            vis_tracks(pred_traj[pred_traj['frame_id'] >= new_gen_frame_start],name=os.path.join(save_folder,'generate_traj_all'))
+            frame_start = new_gen_frame_start
+            frame_end = new_gen_frame_start * 2  # 8---15
+            vis_gen_traj = pred_traj[(pred_traj['frame_id'] >= frame_start)& (pred_traj['frame_id'] < frame_end)]
+            vis_tracks(vis_gen_traj,name=os.path.join(save_folder,f'generate_traj_frame{frame_start}_{frame_end-1}'))
         
 
     # return traj_hist_df, init_traj_df, config
@@ -477,9 +503,15 @@ def main(stride_value):
 if __name__ == '__main__':
     # stride = 1
     # for stride in [1,2,4,5,10,20,50,100]: # steps对应[100,50,25,20,10,5,2,1]
-    for stride in [1]: # steps对应[100]   用于microtubule数据类型
+    # 获取当前时间
+    current_time = datetime.datetime.now()
+
+    # 格式化时间字符串
+    formatted_time = current_time.strftime("%Y-%m-%d_%H-%M-%S")
+
+    for stride in [100]: # steps对应[100]   用于microtubule数据类型
         pred_traj, init_traj_df, config = None, None, None
         new_gen_frame_start = 8
         print(stride, type(stride))
-        main(stride)
+        main(stride,formatted_time)
         

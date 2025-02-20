@@ -15,7 +15,10 @@ from scipy.stats import ks_2samp
 from scipy.stats import wasserstein_distance
 import seaborn as sns
 from scipy.stats import mannwhitneyu
+import sys
 # from sklearn.metrics import mean_squared_error
+import shutil
+
 
 # Set the font family to Arial
 plt.rcParams['font.family'] = 'Arial'
@@ -282,6 +285,8 @@ def cal_msd_sim(msd_real,msd_generated):
         print(f"when tau = {tau}, Wasserstein Distance: {w_distance:.4f}")
         wasserstein_dist_list.append(w_distance)
     return mse_msd, wasserstein_dist_list
+
+
 if __name__ == '__main__':
 
     use_init_as_reference = True
@@ -289,97 +294,114 @@ if __name__ == '__main__':
     vis = True
 
     # for stride in [1,2,4,5,10,20,50,100]: # steps对应[100,50,25,20,10,5,2,1]
-    for stride in [1,2,100]: # steps对应[100,50,25,20,10,5,2,1]
+    for stride in [1,2,4]: # steps对应[100,50,25,20,10,5,2,1]
         print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>    stride = {stride}   <<<<<<<<<<<<<<<<<<<<<<<<")
-        # 读入真实轨迹和生成轨迹
-        # real_txtpath = f'/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/experiments/microtubule_low_future1_sample1_dt1_std323_del_neighbor_label_yst/microtubule_low_epoch90_same_density/stride_{stride}/MICROTUBULE_snr_7_density_low.txt'
-        real_txtpath = f'/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/experiments/microtubule_mid_future1_sample1_dt1_std323_del_neighbor_label_yst/microtubule_mid_epoch90_same_density_2025-02-18_10-19-01/stride_{stride}/val_MICROTUBULE_snr_7_density_mid/MICROTUBULE_snr_7_density_mid.txt'
-        df_real = pd.read_csv(real_txtpath, sep='\t', header=None, index_col=None)
-        df_real.columns = ['frame_id', 'track_id', 'pos_x', 'pos_y']
-        df_real['frame_id'] = df_real['frame_id'] // 10
+        log_dir = f'./experiments/helab_vesicle_future1_sample1_dt1_std322_del_neighbor_label_yst/helab_vesicle_epoch90_length8_2025-02-20_11-53-03/stride_{stride}/train_vesicle_FP_C1_5/'
+        log_file = os.path.join(log_dir, 'log.txt')
+        os.makedirs(log_dir, exist_ok=True)
+        # 保存当前的代码文件到save路径
+        save_code_path = log_file.replace('log.txt','code.py')
+        thispath = os.path.abspath(__file__)
+        shutil.copy(thispath, save_code_path)
+        
+        with open(log_file, 'w') as f:
+            sys.stdout = f
+            sys.stderr = f
+            # 读入真实轨迹和生成轨迹
+            real_txtpath = f'./experiments/helab_vesicle_future1_sample1_dt1_std322_del_neighbor_label_yst/helab_vesicle_epoch90_length8_2025-02-20_11-53-03/stride_{stride}/train_vesicle_FP_C1_5/gen_id0/vesicle_FP_C1_5.txt'
+            df_real_ori = pd.read_csv(real_txtpath, sep='\t', header=None, index_col=None)
+            df_real_ori.columns = ['frame_id', 'track_id', 'pos_x', 'pos_y']
+            # df_real['frame_id'] = df_real['frame_id']
 
-        if use_init_as_reference:
-            # 找到最后一帧还存在的轨迹，并且长度可以长于7帧的
-            trackid_list = df_real[df_real['frame_id'] == 99]['track_id'].values.tolist()
+            for genid,endframe in enumerate(range(8, df_real_ori['frame_id'].max(), 8)):
+                print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>    genid = {genid}   <<<<<<<<<<<<<<<<<<<<<<<<")
+                if use_init_as_reference:
+                    # 找到指定帧帧还存在的轨迹，并且长度可以长于7帧的
+                    trackid_list = df_real_ori[df_real_ori['frame_id'] == endframe]['track_id'].values.tolist()
+                    filter_tracks = df_real_ori[df_real_ori['track_id'].isin(trackid_list)]
+                    filter_tracks = filter_tracks[filter_tracks['frame_id'] <= endframe]
 
-            filter_trackid_list = []
-            for tkid in trackid_list:
-                if len(df_real[df_real['track_id'] == tkid]) > 7:
-                    filter_trackid_list.append(tkid)
-            
-            filter_tracks = df_real[df_real['track_id'].isin(filter_trackid_list)]
+                    # 过滤历史轨迹的长度要求
+                    filter_trackid_list = []
+                    for tkid in trackid_list:
+                        if len(filter_tracks[filter_tracks['track_id'] == tkid]) > 7:
+                            filter_trackid_list.append(tkid)
 
-            df_real = filter_tracks[filter_tracks['frame_id'] >= 99 - 7]
+                    filter_tracks = filter_tracks[filter_tracks['track_id'].isin(filter_trackid_list)]
+                    
+                    # 截断不需要的久远历史
+                    df_real = filter_tracks[filter_tracks['frame_id'] >= endframe - 7]
 
-        # generated_csvpath = f'/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/experiments/microtubule_low_future1_sample1_dt1_std323_del_neighbor_label_yst/microtubule_low_epoch90_same_density/stride_{stride}/generate_tracks.csv'
-        generated_csvpath = f'/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/experiments/microtubule_mid_future1_sample1_dt1_std323_del_neighbor_label_yst/microtubule_mid_epoch90_same_density_2025-02-18_10-19-01/stride_{stride}/val_MICROTUBULE_snr_7_density_mid/generate_tracks.csv'
-        df_generated = pd.read_csv(generated_csvpath,header=0, index_col=None)
-        df_generated = df_generated[df_generated['frame_id'] < 50]
-        if use_same_length_tracks:
-            df_generated = df_generated[df_generated['frame_id']< 8]
+                generated_csvpath = f'./experiments/helab_vesicle_future1_sample1_dt1_std322_del_neighbor_label_yst/helab_vesicle_epoch90_length8_2025-02-20_11-53-03/stride_{stride}/train_vesicle_FP_C1_5/gen_id{genid}/generate_tracks.csv'
+                df_generated = pd.read_csv(generated_csvpath,header=0, index_col=None)
+                df_generated = df_generated[df_generated['frame_id'] < 50]
+                if use_same_length_tracks:
+                    df_generated = df_generated[df_generated['frame_id']< 8]
 
-        # 计算msd
-        msd_real = compute_msd_all_track(df_real)
-        msd_generated = compute_msd_all_track(df_generated)
-        # 计算msd的相似性
-        msd_mse, msd_was_dist_list = cal_msd_sim(msd_real,msd_generated)
+                # 计算msd
+                msd_real = compute_msd_all_track(df_real)
+                msd_generated = compute_msd_all_track(df_generated)
+                # 计算msd的相似性
+                msd_mse, msd_was_dist_list = cal_msd_sim(msd_real,msd_generated)
 
-        # 计算速度
-        speed_real = compute_speed_distribution(df_real)
-        speed_generated = compute_speed_distribution(df_generated)
-        print('速度 distribution:')
-        compare_distribution(speed_real, speed_generated)
-        # 计算转角
-        angles_real = compute_turning_angles(df_real)
-        angles_generated = compute_turning_angles(df_generated)
-        print('转角 distribution:')
-        compare_distribution(angles_real, angles_generated)
-        # 计算一致性
-        persistence_real = compute_trajectory_persistence(df_real)
-        persistence_generated = compute_trajectory_persistence(df_generated)
-        print('一致性 distribution:')
-        compare_distribution(persistence_real, persistence_generated)
+                # 计算速度
+                speed_real = compute_speed_distribution(df_real)
+                speed_generated = compute_speed_distribution(df_generated)
+                print('速度 distribution:')
+                compare_distribution(speed_real, speed_generated)
+                # 计算转角
+                angles_real = compute_turning_angles(df_real)
+                angles_generated = compute_turning_angles(df_generated)
+                print('转角 distribution:')
+                compare_distribution(angles_real, angles_generated)
+                # 计算一致性
+                persistence_real = compute_trajectory_persistence(df_real)
+                persistence_generated = compute_trajectory_persistence(df_generated)
+                print('一致性 distribution:')
+                compare_distribution(persistence_real, persistence_generated)
 
-        if vis:
-            savepath = os.path.split(generated_csvpath)[0]
-            savepath = os.path.join(savepath, 'figs')
-            os.makedirs(savepath, exist_ok=True)
-            # 绘制msd曲线
-            plot_msd(msd_real,msd_generated,os.path.join(savepath, "sns_mean_msd.png"))
+                if vis:
+                    savepath = os.path.split(generated_csvpath)[0]
+                    savepath = os.path.join(savepath, 'figs')
+                    os.makedirs(savepath, exist_ok=True)
+                    # 绘制msd曲线
+                    plot_msd(msd_real,msd_generated,os.path.join(savepath, "sns_mean_msd.png"))
 
-            # 绘制速度分布直方图
-            plt.figure()
-            bins = np.linspace(0, 10, 30)  # 生成从-3到3的30个等间隔的bins
-            plt.hist(speed_real, bins=bins, alpha=0.5, label="Real Speed")
-            plt.hist(speed_generated, bins=bins, alpha=0.5, label="Generated Speed")
-            plt.xlabel('Speed (px/frame)')
-            plt.ylabel('Frequency')
-            plt.legend()
-            plt.savefig(os.path.join(savepath, "speed.png"))
-            plt.savefig(os.path.join(savepath, "speed.pdf"), format='pdf')
-            plt.close()
-            # plt.show()
+                    # 绘制速度分布直方图
+                    plt.figure()
+                    bins = np.linspace(0, 10, 30)  # 生成从-3到3的30个等间隔的bins
+                    plt.hist(speed_real, bins=bins, alpha=0.5, label="Real Speed")
+                    plt.hist(speed_generated, bins=bins, alpha=0.5, label="Generated Speed")
+                    plt.xlabel('Speed (px/frame)')
+                    plt.ylabel('Frequency')
+                    plt.legend()
+                    plt.savefig(os.path.join(savepath, "speed.png"))
+                    plt.savefig(os.path.join(savepath, "speed.pdf"), format='pdf')
+                    plt.close()
+                    # plt.show()
 
-            # 绘制转角分布直方图
-            plt.figure()
-            bins = np.linspace(0, 180, 30)  # 生成从-3到3的30个等间隔的bins
-            plt.hist(angles_real, bins=bins, alpha=0.5, label="Real angles")
-            plt.hist(angles_generated, bins=bins, alpha=0.5, label="Generated angles")
-            plt.xlabel('Angles (degree)')
-            plt.ylabel('Frequency')
-            plt.legend(loc = 'upper right')
-            plt.savefig(os.path.join(savepath, "angles.png"))
-            plt.savefig(os.path.join(savepath, "angles.pdf"), format='pdf')
-            plt.close()
+                    # 绘制转角分布直方图
+                    plt.figure()
+                    bins = np.linspace(0, 180, 30)  # 生成从-3到3的30个等间隔的bins
+                    plt.hist(angles_real, bins=bins, alpha=0.5, label="Real angles")
+                    plt.hist(angles_generated, bins=bins, alpha=0.5, label="Generated angles")
+                    plt.xlabel('Angles (degree)')
+                    plt.ylabel('Frequency')
+                    plt.legend(loc = 'upper right')
+                    plt.savefig(os.path.join(savepath, "angles.png"))
+                    plt.savefig(os.path.join(savepath, "angles.pdf"), format='pdf')
+                    plt.close()
 
-            # 绘制一致性分布直方图
-            plt.figure()
-            bins = np.linspace(0, 180, 30)  # 生成从-3到3的30个等间隔的bins
-            plt.hist(persistence_real, bins=bins, alpha=0.5, label="Real persistence")
-            plt.hist(persistence_generated, bins=bins, alpha=0.5, label="Generated persistence")
-            plt.legend(loc = 'upper right')
-            plt.xlabel('Angles (degree)')
-            plt.ylabel('Frequency')
-            plt.savefig(os.path.join(savepath, "persistence.png"))
-            plt.savefig(os.path.join(savepath, "persistence.pdf"), format='pdf')
-            plt.close()
+                    # 绘制一致性分布直方图
+                    plt.figure()
+                    bins = np.linspace(0, 180, 30)  # 生成从-3到3的30个等间隔的bins
+                    plt.hist(persistence_real, bins=bins, alpha=0.5, label="Real persistence")
+                    plt.hist(persistence_generated, bins=bins, alpha=0.5, label="Generated persistence")
+                    plt.legend(loc = 'upper right')
+                    plt.xlabel('Angles (degree)')
+                    plt.ylabel('Frequency')
+                    plt.savefig(os.path.join(savepath, "persistence.png"))
+                    plt.savefig(os.path.join(savepath, "persistence.pdf"), format='pdf')
+                    plt.close()
+            sys.stdout = sys.__stdout__
+            sys.stderr = sys.__stderr__
