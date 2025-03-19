@@ -431,7 +431,7 @@ class MultimodalGenerativeCVAE(object):
         # Encode History # 得到的是每个轨迹的最后一个位置的编码向量
         ##################
         node_history_encoded = self.encode_node_history(mode,
-                                                        node_history_st,
+                                                        node_history_st, # 标准化的history
                                                         first_history_indices)
 
         ##################
@@ -516,6 +516,9 @@ class MultimodalGenerativeCVAE(object):
         y_e = None # xshape [bs, featdim*2] yshape[bs, futurelen, outdim] 
         return x, x_r_t, y_e, y_r, y, n_s_t0 # n_s_t0:[bs, inputdim] 最新位置的标准化
 
+    '''
+    **** 用这个编码轨迹的历史信息，不包括邻居信息
+    '''
     def encode_node_history(self, mode, node_hist, first_history_indices):
         """
         Encodes the nodes history.

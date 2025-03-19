@@ -19,7 +19,9 @@ class AutoEncoder(Module):
         self.config = config
         self.encoder = encoder
         self.diffnet = getattr(diffusion, config.diffnet)
-
+        '''
+        ****设置扩散系数，去噪模型和参数
+        '''
         self.diffusion = DiffusionTraj(
             net = self.diffnet(point_dim=2, context_dim=config.encoder_dim, tf_layer=config.tf_layer, residual=False),
             var_sched = VarianceSchedule( # 负责扩散的模块

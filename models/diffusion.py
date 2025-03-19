@@ -136,47 +136,50 @@ class DiffusionTraj(Module):
                 traj_list.append(traj[0])
         return torch.stack(traj_list)
 
-class TrajNet(Module):
+'''
+这是不同的解码器方案 TrajNet
+'''
+# class TrajNet(Module):
 
-    def __init__(self, point_dim, context_dim, residual):
-        super().__init__()
-        self.act = F.leaky_relu
-        self.residual = residual
-        self.layers = ModuleList([
-            ConcatSquashLinear(2, 128, context_dim+3),
-            ConcatSquashLinear(128, 256, context_dim+3),
-            ConcatSquashLinear(256, 512, context_dim+3),
-            ConcatSquashLinear(512, 256, context_dim+3),
-            ConcatSquashLinear(256, 128, context_dim+3),
-            ConcatSquashLinear(128, 2, context_dim+3),
+#     def __init__(self, point_dim, context_dim, residual):
+#         super().__init__()
+#         self.act = F.leaky_relu
+#         self.residual = residual
+#         self.layers = ModuleList([
+#             ConcatSquashLinear(2, 128, context_dim+3),
+#             ConcatSquashLinear(128, 256, context_dim+3),
+#             ConcatSquashLinear(256, 512, context_dim+3),
+#             ConcatSquashLinear(512, 256, context_dim+3),
+#             ConcatSquashLinear(256, 128, context_dim+3),
+#             ConcatSquashLinear(128, 2, context_dim+3),
 
-        ])
+#         ])
 
-    def forward(self, x, beta, context):
-        """
-        Args:
-            x:  Point clouds at some timestep t, (B, N, d).
-            beta:     Time. (B, ).
-            context:  Shape latents. (B, F).
-        """
-        batch_size = x.size(0)
-        beta = beta.view(batch_size, 1, 1)          # (B, 1, 1)
-        context = context.view(batch_size, 1, -1)   # (B, 1, F)
+#     def forward(self, x, beta, context):
+#         """
+#         Args:
+#             x:  Point clouds at some timestep t, (B, N, d).
+#             beta:     Time. (B, ).
+#             context:  Shape latents. (B, F).
+#         """
+#         batch_size = x.size(0)
+#         beta = beta.view(batch_size, 1, 1)          # (B, 1, 1)
+#         context = context.view(batch_size, 1, -1)   # (B, 1, F)
 
-        time_emb = torch.cat([beta, torch.sin(beta), torch.cos(beta)], dim=-1)  # (B, 1, 3)
-        ctx_emb = torch.cat([time_emb, context], dim=-1)    # (B, 1, F+3)
+#         time_emb = torch.cat([beta, torch.sin(beta), torch.cos(beta)], dim=-1)  # (B, 1, 3)
+#         ctx_emb = torch.cat([time_emb, context], dim=-1)    # (B, 1, F+3)
 
-        out = x
-        #pdb.set_trace()
-        for i, layer in enumerate(self.layers):
-            out = layer(ctx=ctx_emb, x=out)
-            if i < len(self.layers) - 1:
-                out = self.act(out)
+#         out = x
+#         #pdb.set_trace()
+#         for i, layer in enumerate(self.layers):
+#             out = layer(ctx=ctx_emb, x=out)
+#             if i < len(self.layers) - 1:
+#                 out = self.act(out)
 
-        if self.residual:
-            return x + out
-        else:
-            return out
+#         if self.residual:
+#             return x + out
+#         else:
+#             return out
 
 
 class TransformerConcatLinear(Module):
@@ -211,65 +214,69 @@ class TransformerConcatLinear(Module):
         trans = self.concat4(ctx_emb, trans)
         return self.linear(ctx_emb, trans) # bs, fut_len, outdim
 
-class TransformerLinear(Module):
 
-    def __init__(self, point_dim, context_dim, residual):
-        super().__init__()
-        self.residual = residual
+'''
+这是不同的解码器方案 TransformerLinear
+'''
+# class TransformerLinear(Module):
 
-        self.pos_emb = PositionalEncoding(d_model=128, dropout=0.1, max_len=24)
-        self.y_up = nn.Linear(2, 128)
-        self.ctx_up = nn.Linear(context_dim+3, 128)
-        self.layer = nn.TransformerEncoderLayer(d_model=128, nhead=2, dim_feedforward=512)
-        self.transformer_encoder = nn.TransformerEncoder(self.layer, num_layers=3)
-        self.linear = nn.Linear(128, point_dim)
+#     def __init__(self, point_dim, context_dim, residual):
+#         super().__init__()
+#         self.residual = residual
 
-    def forward(self, x, beta, context):
+#         self.pos_emb = PositionalEncoding(d_model=128, dropout=0.1, max_len=24)
+#         self.y_up = nn.Linear(2, 128)
+#         self.ctx_up = nn.Linear(context_dim+3, 128)
+#         self.layer = nn.TransformerEncoderLayer(d_model=128, nhead=2, dim_feedforward=512)
+#         self.transformer_encoder = nn.TransformerEncoder(self.layer, num_layers=3)
+#         self.linear = nn.Linear(128, point_dim)
 
-        batch_size = x.size(0)
-        beta = beta.view(batch_size, 1, 1)          # (B, 1, 1)
-        context = context.view(batch_size, 1, -1)   # (B, 1, F)
+#     def forward(self, x, beta, context):
 
-        time_emb = torch.cat([beta, torch.sin(beta), torch.cos(beta)], dim=-1)  # (B, 1, 3)
-        ctx_emb = torch.cat([time_emb, context], dim=-1)    # (B, 1, F+3)
+#         batch_size = x.size(0)
+#         beta = beta.view(batch_size, 1, 1)          # (B, 1, 1)
+#         context = context.view(batch_size, 1, -1)   # (B, 1, F)
 
-        ctx_emb = self.ctx_up(ctx_emb)
-        emb = self.y_up(x)
-        final_emb = torch.cat([ctx_emb, emb], dim=1).permute(1,0,2)
-        #pdb.set_trace()
-        final_emb = self.pos_emb(final_emb)
+#         time_emb = torch.cat([beta, torch.sin(beta), torch.cos(beta)], dim=-1)  # (B, 1, 3)
+#         ctx_emb = torch.cat([time_emb, context], dim=-1)    # (B, 1, F+3)
 
-        trans = self.transformer_encoder(final_emb)  # 13 * b * 128
-        trans = trans[1:].permute(1,0,2)   # B * 12 * 128, drop the first one which is the z
-        return self.linear(trans)
+#         ctx_emb = self.ctx_up(ctx_emb)
+#         emb = self.y_up(x)
+#         final_emb = torch.cat([ctx_emb, emb], dim=1).permute(1,0,2)
+#         #pdb.set_trace()
+#         final_emb = self.pos_emb(final_emb)
 
-
-
-
+#         trans = self.transformer_encoder(final_emb)  # 13 * b * 128
+#         trans = trans[1:].permute(1,0,2)   # B * 12 * 128, drop the first one which is the z
+#         return self.linear(trans)
 
 
 
-class LinearDecoder(Module):
-    def __init__(self):
-            super().__init__()
-            self.act = F.leaky_relu
-            self.layers = ModuleList([
-                #nn.Linear(2, 64),
-                nn.Linear(32, 64),
-                nn.Linear(64, 128),
-                nn.Linear(128, 256),
-                nn.Linear(256, 512),
-                nn.Linear(512, 256),
-                nn.Linear(256, 128),
-                nn.Linear(128, 12)
-                #nn.Linear(2, 64),
-                #nn.Linear(2, 64),
-            ])
-    def forward(self, code):
 
-        out = code
-        for i, layer in enumerate(self.layers):
-            out = layer(out)
-            if i < len(self.layers) - 1:
-                out = self.act(out)
-        return out
+
+
+
+# class LinearDecoder(Module):
+#     def __init__(self):
+#             super().__init__()
+#             self.act = F.leaky_relu
+#             self.layers = ModuleList([
+#                 #nn.Linear(2, 64),
+#                 nn.Linear(32, 64),
+#                 nn.Linear(64, 128),
+#                 nn.Linear(128, 256),
+#                 nn.Linear(256, 512),
+#                 nn.Linear(512, 256),
+#                 nn.Linear(256, 128),
+#                 nn.Linear(128, 12)
+#                 #nn.Linear(2, 64),
+#                 #nn.Linear(2, 64),
+#             ])
+#     def forward(self, code):
+
+#         out = code
+#         for i, layer in enumerate(self.layers):
+#             out = layer(out)
+#             if i < len(self.layers) - 1:
+#                 out = self.act(out)
+#         return out

@@ -60,7 +60,9 @@ def mutual_inf_mc(x_dist):
     H_y = dist(probs=x_dist.probs.mean(dim=0)).entropy()
     return (H_y - x_dist.entropy().mean(dim=0)).sum()
 
-
+'''
+**** 具体做轨迹历史编码的函数
+'''
 def run_lstm_on_variable_length_seqs(lstm_module, original_seqs, lower_indices=None, upper_indices=None, total_length=None):
     bs, tf = original_seqs.shape[:2] # tf: history_length
     if lower_indices is None:

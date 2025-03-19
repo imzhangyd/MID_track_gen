@@ -294,7 +294,7 @@ if __name__ == '__main__':
     vis = True
 
     # for stride in [1,2,4,5,10,20,50,100]: # steps对应[100,50,25,20,10,5,2,1]
-    for stride in [1,2,4]: # steps对应[100,50,25,20,10,5,2,1]
+    for stride in [1,2,4,5,10,20,50,100]: # steps对应[100,50,25,20,10,5,2,1]
         print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>    stride = {stride}   <<<<<<<<<<<<<<<<<<<<<<<<")
         log_dir = f'./experiments/helab_vesicle_future1_sample1_dt1_std322_del_neighbor_label_yst/helab_vesicle_epoch90_length8_2025-02-20_11-53-03/stride_{stride}/train_vesicle_FP_C1_5/'
         log_file = os.path.join(log_dir, 'log.txt')
