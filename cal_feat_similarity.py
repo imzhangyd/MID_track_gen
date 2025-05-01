@@ -15,6 +15,7 @@ from scipy.stats import ks_2samp
 from scipy.stats import wasserstein_distance
 import seaborn as sns
 from scipy.stats import mannwhitneyu
+from scipy.spatial import distance
 # from sklearn.metrics import mean_squared_error
 
 # Set the font family to Arial
@@ -46,17 +47,17 @@ plt.rcParams['axes.spines.bottom'] = True
 # Set the axes label size to 6
 plt.rcParams['axes.labelsize'] = 6
 # Set the legend font size to 6
-plt.rcParams['legend.fontsize'] = 6
+# plt.rcParams['legend.fontsize'] = 6
 # Disable the legend frame
-plt.rcParams['legend.frameon'] = False
+# plt.rcParams['legend.frameon'] = False
 # Set the legend handle length to 1
-plt.rcParams['legend.handlelength'] = 1
+# plt.rcParams['legend.handlelength'] = 1
 # Set the legend handle text padding to 0.5
-plt.rcParams['legend.handletextpad'] = 0.5
+# plt.rcParams['legend.handletextpad'] = 0.5
 # Set the legend label spacing to 0.5
-plt.rcParams['legend.labelspacing'] = 0.5
+# plt.rcParams['legend.labelspacing'] = 0.5
 # Set the legend location to 'upper right'
-plt.rcParams['legend.loc'] = 'upper left'
+# plt.rcParams['legend.loc'] = 'upper left'
 # Set the lines linewidth to 0.5
 plt.rcParams['lines.linewidth'] = 0.5
 # Set the lines markersize to 2
@@ -222,6 +223,14 @@ def compare_distribution(real_values, generated_values):
     wasserstein_dist = wasserstein_distance(real_values, generated_values)
     print(f"Wasserstein Distance: {wasserstein_dist}, 越小 形状越接近")  # 越小表示分布越接近
 
+    if len(real_values) > len(generated_values):
+        real_values = np.random.choice(real_values, size=len(generated_values), replace=False)
+    elif len(generated_values) > len(real_values):
+        generated_values = np.random.choice(generated_values, size=len(real_values), replace=False)
+
+    jsd = distance.jensenshannon(real_values, generated_values, base=2)
+    print(f"jsd Distance: {jsd}, 越小 形状越接近")  # 越小表示分布越接近
+
 
 
 def plot_msd(msd_real,msd_generated,save_path):
@@ -247,7 +256,7 @@ def plot_msd(msd_real,msd_generated,save_path):
     plt.plot(list(msd_generated.keys()), [v[0] for v in msd_generated.values()], linestyle='-', color=palette[1], marker='o', markersize=10, alpha=0.7, label='Generated Mean')
 
     # 添加图例
-    plt.legend()
+    # plt.legend()
 
     # 添加轮廓背景
     sns.despine()
@@ -282,6 +291,8 @@ def cal_msd_sim(msd_real,msd_generated):
         print(f"when tau = {tau}, Wasserstein Distance: {w_distance:.4f}")
         wasserstein_dist_list.append(w_distance)
     return mse_msd, wasserstein_dist_list
+
+
 if __name__ == '__main__':
 
     use_init_as_reference = True
@@ -289,11 +300,13 @@ if __name__ == '__main__':
     vis = True
 
     # for stride in [1,2,4,5,10,20,50,100]: # steps对应[100,50,25,20,10,5,2,1]
-    for stride in [1,2,100]: # steps对应[100,50,25,20,10,5,2,1]
+    for stride in [1,2]: # steps对应[100,50,25,20,10,5,2,1]
         print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>    stride = {stride}   <<<<<<<<<<<<<<<<<<<<<<<<")
         # 读入真实轨迹和生成轨迹
         # real_txtpath = f'/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/experiments/microtubule_low_future1_sample1_dt1_std323_del_neighbor_label_yst/microtubule_low_epoch90_same_density/stride_{stride}/MICROTUBULE_snr_7_density_low.txt'
-        real_txtpath = f'/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/experiments/microtubule_mid_future1_sample1_dt1_std323_del_neighbor_label_yst/microtubule_mid_epoch90_same_density_2025-02-18_10-19-01/stride_{stride}/val_MICROTUBULE_snr_7_density_mid/MICROTUBULE_snr_7_density_mid.txt'
+        real_txtpath = f'/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/experiments/microtubule_low_future1_sample1_dt1_std323_del_neighbor_label_yst/microtubule_low_epoch90/stride_{stride}/MICROTUBULE_snr_7_density_low.txt'
+        # real_txtpath = f'/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/experiments/microtubule_mid_future1_sample1_dt1_std323_del_neighbor_label_yst/microtubule_mid_epoch90_same_density_2025-02-18_10-19-01/stride_{stride}/val_MICROTUBULE_snr_7_density_mid/MICROTUBULE_snr_7_density_mid.txt'
+        # real_txtpath = f'/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/experiments/vesicle_low_future1_sample1_dt1_std323_del_neighbor_label_yst_repeat/vesicle_low_epoch90/stride_100/VESICLE_snr_7_density_low.txt'
         df_real = pd.read_csv(real_txtpath, sep='\t', header=None, index_col=None)
         df_real.columns = ['frame_id', 'track_id', 'pos_x', 'pos_y']
         df_real['frame_id'] = df_real['frame_id'] // 10
@@ -312,7 +325,9 @@ if __name__ == '__main__':
             df_real = filter_tracks[filter_tracks['frame_id'] >= 99 - 7]
 
         # generated_csvpath = f'/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/experiments/microtubule_low_future1_sample1_dt1_std323_del_neighbor_label_yst/microtubule_low_epoch90_same_density/stride_{stride}/generate_tracks.csv'
-        generated_csvpath = f'/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/experiments/microtubule_mid_future1_sample1_dt1_std323_del_neighbor_label_yst/microtubule_mid_epoch90_same_density_2025-02-18_10-19-01/stride_{stride}/val_MICROTUBULE_snr_7_density_mid/generate_tracks.csv'
+        generated_csvpath = f'/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/experiments/microtubule_low_future1_sample1_dt1_std323_del_neighbor_label_yst/microtubule_low_epoch90/stride_{stride}/generate_tracks.csv'
+        # generated_csvpath = f'/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/experiments/microtubule_mid_future1_sample1_dt1_std323_del_neighbor_label_yst/microtubule_mid_epoch90_same_density_2025-02-18_10-19-01/stride_{stride}/val_MICROTUBULE_snr_7_density_mid/generate_tracks.csv'
+        # generated_csvpath = f'/ldap_shared/home/s_zyd/proj_track_gen/MID_track_gen/experiments/vesicle_low_future1_sample1_dt1_std323_del_neighbor_label_yst_repeat/vesicle_low_epoch90/stride_100/generate_tracks.csv'
         df_generated = pd.read_csv(generated_csvpath,header=0, index_col=None)
         df_generated = df_generated[df_generated['frame_id'] < 50]
         if use_same_length_tracks:
@@ -354,7 +369,7 @@ if __name__ == '__main__':
             plt.hist(speed_generated, bins=bins, alpha=0.5, label="Generated Speed")
             plt.xlabel('Speed (px/frame)')
             plt.ylabel('Frequency')
-            plt.legend()
+            # plt.legend()
             plt.savefig(os.path.join(savepath, "speed.png"))
             plt.savefig(os.path.join(savepath, "speed.pdf"), format='pdf')
             plt.close()
@@ -367,7 +382,7 @@ if __name__ == '__main__':
             plt.hist(angles_generated, bins=bins, alpha=0.5, label="Generated angles")
             plt.xlabel('Angles (degree)')
             plt.ylabel('Frequency')
-            plt.legend(loc = 'upper right')
+            # plt.legend(loc = 'upper right')
             plt.savefig(os.path.join(savepath, "angles.png"))
             plt.savefig(os.path.join(savepath, "angles.pdf"), format='pdf')
             plt.close()
@@ -377,7 +392,7 @@ if __name__ == '__main__':
             bins = np.linspace(0, 180, 30)  # 生成从-3到3的30个等间隔的bins
             plt.hist(persistence_real, bins=bins, alpha=0.5, label="Real persistence")
             plt.hist(persistence_generated, bins=bins, alpha=0.5, label="Generated persistence")
-            plt.legend(loc = 'upper right')
+            # plt.legend(loc = 'upper right')
             plt.xlabel('Angles (degree)')
             plt.ylabel('Frequency')
             plt.savefig(os.path.join(savepath, "persistence.png"))
